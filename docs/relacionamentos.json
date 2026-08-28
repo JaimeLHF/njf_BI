@@ -1,0 +1,948 @@
+{
+  "escopo": {
+    "vendas": [
+      "fat_pedido",
+      "fat_pedido_item",
+      "fat_pedido_representante_secundario",
+      "fat_nota_saida",
+      "fat_nota_saida_item",
+      "fat_nota_saida_item_pedido",
+      "fat_nota_saida_item_pontuacao",
+      "ponte_nota_item_pedido_item",
+      "ponte_nota_saida_item_servico",
+      "fat_contrato_loja",
+      "fat_contrato_loja_parcela"
+    ],
+    "producao": [
+      "fat_ordem_fabricacao",
+      "fat_ordem_roteiro",
+      "fat_ordem_movimento",
+      "fat_pontuacao_producao",
+      "ponte_pedido_configuracao_ordem"
+    ],
+    "dimensoes": [
+      "dim_empresa",
+      "dim_estabelecimento",
+      "dim_cliente",
+      "dim_representante",
+      "dim_item",
+      "dim_item_empresa",
+      "dim_item_ordem",
+      "dim_item_classificacao",
+      "dim_tipo_nf_saida",
+      "dim_condicao_pagamento",
+      "dim_condicao_pagamento_parcela",
+      "dim_operacao",
+      "dim_centro_trabalho",
+      "dim_centro_custo",
+      "dim_cidade",
+      "dim_unidade_medida",
+      "dim_servico_lei",
+      "dim_calendario"
+    ]
+  },
+  "relacionamentos": [
+    {
+      "tabela": "fat_pedido",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 202918,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 12,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido",
+      "coluna": "id_estabelecimento",
+      "tabela_ref": "dim_estabelecimento",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_estabelecimento"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 202918,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 6252,
+        "coluna_ref": "id_estabelecimento",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido",
+      "coluna": "id_tipo_nf_saida",
+      "tabela_ref": "dim_tipo_nf_saida",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_tipo_nf_saida"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 202918,
+        "nulos": 4059,
+        "orfaos": 0,
+        "distintos": 182,
+        "coluna_ref": "id_tipo_nf_saida",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido",
+      "coluna": "id_representante",
+      "tabela_ref": "dim_representante",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_representante"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 202918,
+        "nulos": 4044,
+        "orfaos": 0,
+        "distintos": 31,
+        "coluna_ref": "id_representante",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido",
+      "coluna": "id_condicao_pagamento",
+      "tabela_ref": "dim_condicao_pagamento",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_condicao_pagamento"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 202918,
+        "nulos": 4066,
+        "orfaos": 0,
+        "distintos": 148,
+        "coluna_ref": "id_condicao_pagamento",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido_item",
+      "coluna": "id_pedido",
+      "tabela_ref": "fat_pedido",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_pedido"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 379754,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 201750,
+        "coluna_ref": "id_pedido",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido_item",
+      "coluna": "id_item_empresa",
+      "tabela_ref": "dim_item_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 379754,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 15779,
+        "coluna_ref": "id_item_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido_item",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 379754,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 12,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido_item",
+      "coluna": "id_mascara",
+      "tabela_ref": "dim_mascara",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_mascara"
+      ],
+      "validacao": null
+    },
+    {
+      "tabela": "fat_pedido_representante_secundario",
+      "coluna": "id_pedido",
+      "tabela_ref": "fat_pedido",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_pedido"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 2880,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 875,
+        "coluna_ref": "id_pedido",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pedido_representante_secundario",
+      "coluna": "id_representante",
+      "tabela_ref": "dim_representante",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_representante"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 2880,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 57,
+        "coluna_ref": "id_representante",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 132407,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 15,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida",
+      "coluna": "id_cliente",
+      "tabela_ref": "dim_cliente",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_cliente"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 132407,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 6474,
+        "coluna_ref": "id_cliente",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida",
+      "coluna": "id_estabelecimento",
+      "tabela_ref": "dim_estabelecimento",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_estabelecimento"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 132407,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 6785,
+        "coluna_ref": "id_estabelecimento",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida",
+      "coluna": "id_representante",
+      "tabela_ref": "dim_representante",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_representante"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 132407,
+        "nulos": 329,
+        "orfaos": 0,
+        "distintos": 33,
+        "coluna_ref": "id_representante",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item",
+      "coluna": "id_nota_saida",
+      "tabela_ref": "fat_nota_saida",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 254031,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 132407,
+        "coluna_ref": "id_nota_saida",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item",
+      "coluna": "id_item_empresa",
+      "tabela_ref": "dim_item_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 254031,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 20866,
+        "coluna_ref": "id_item_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item",
+      "coluna": "id_tipo_nf_saida",
+      "tabela_ref": "dim_tipo_nf_saida",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_tipo_nf_saida"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 254031,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 380,
+        "coluna_ref": "id_tipo_nf_saida",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item",
+      "coluna": "id_item",
+      "tabela_ref": "dim_item",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 254031,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 13180,
+        "coluna_ref": "id_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pedido",
+      "coluna": "id_nota_saida_item",
+      "tabela_ref": "fat_nota_saida_item",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 562914,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 187615,
+        "coluna_ref": "id_nota_saida_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pedido",
+      "coluna": "id_nota_saida",
+      "tabela_ref": "fat_nota_saida",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 562914,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 97115,
+        "coluna_ref": "id_nota_saida",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pedido",
+      "coluna": "id_item_empresa",
+      "tabela_ref": "dim_item_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 562914,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 14439,
+        "coluna_ref": "id_item_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pedido",
+      "coluna": "id_tipo_nf_saida",
+      "tabela_ref": "dim_tipo_nf_saida",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_tipo_nf_saida"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 562914,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 180,
+        "coluna_ref": "id_tipo_nf_saida",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pedido",
+      "coluna": "id_pedido",
+      "tabela_ref": "fat_pedido",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_pedido"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 562914,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 76467,
+        "coluna_ref": "id_pedido",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pontuacao",
+      "coluna": "id_ordem_fabricacao",
+      "tabela_ref": "fat_ordem_fabricacao",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_ordem_fabricacao"
+      ],
+      "nota": "coluna guarda o valor de fat_ordem_fabricacao.num_ordem, nao a PK",
+      "validacao": {
+        "total": 1116354,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 75436,
+        "coluna_ref": "num_ordem",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pontuacao",
+      "coluna": "id_nota_saida_item",
+      "tabela_ref": "fat_nota_saida_item",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 1116354,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 148745,
+        "coluna_ref": "id_nota_saida_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_nota_saida_item_pontuacao",
+      "coluna": "id_nota_saida",
+      "tabela_ref": "fat_nota_saida",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 1116354,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 78066,
+        "coluna_ref": "id_nota_saida",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "ponte_nota_item_pedido_item",
+      "coluna": "id_pedido_item",
+      "tabela_ref": "fat_pedido_item",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_pedido_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 652017,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 194229,
+        "coluna_ref": "id_pedido_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "ponte_nota_item_pedido_item",
+      "coluna": "id_nota_saida_item",
+      "tabela_ref": "fat_nota_saida_item",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 652017,
+        "nulos": 89103,
+        "orfaos": 0,
+        "distintos": 187615,
+        "coluna_ref": "id_nota_saida_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "ponte_nota_saida_item_servico",
+      "coluna": "id_nota_saida_item",
+      "tabela_ref": "fat_nota_saida_item",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_nota_saida_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 40206,
+        "nulos": 0,
+        "orfaos": 8850,
+        "distintos": 10453,
+        "coluna_ref": "id_nota_saida_item",
+        "pct_orfaos": 22.012
+      }
+    },
+    {
+      "tabela": "ponte_nota_saida_item_servico",
+      "coluna": "id_servico",
+      "tabela_ref": "dim_servico_lei",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_servico_lei"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 40206,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 84,
+        "coluna_ref": "id_servico",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_contrato_loja",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 31875,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 5,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_contrato_loja",
+      "coluna": "id_cliente",
+      "tabela_ref": "dim_cliente",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_cliente"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 31875,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 5292,
+        "coluna_ref": "id_cliente",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_ordem_fabricacao",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 618358,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 4,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_ordem_fabricacao",
+      "coluna": "id_item_ordem",
+      "tabela_ref": "dim_item_ordem",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item_ordem"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 618358,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 45615,
+        "coluna_ref": "id_item_ordem",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_ordem_fabricacao",
+      "coluna": "id_mascara",
+      "tabela_ref": "dim_mascara",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_mascara"
+      ],
+      "validacao": null
+    },
+    {
+      "tabela": "fat_ordem_roteiro",
+      "coluna": "id_ordem_fabricacao",
+      "tabela_ref": "fat_ordem_fabricacao",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_ordem_fabricacao"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 3695097,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 607134,
+        "coluna_ref": "id_ordem_fabricacao",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_ordem_roteiro",
+      "coluna": "id_operacao",
+      "tabela_ref": "dim_operacao",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_operacao"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 3695097,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 4079,
+        "coluna_ref": "id_operacao",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_ordem_roteiro",
+      "coluna": "id_centro_trabalho",
+      "tabela_ref": "dim_centro_trabalho",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_centro_trabalho"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 3695097,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 90,
+        "coluna_ref": "id_centro_trabalho",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_ordem_movimento",
+      "coluna": "id_ordem_roteiro",
+      "tabela_ref": "fat_ordem_roteiro",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_ordem_roteiro"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 3425536,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 3403868,
+        "coluna_ref": "id_ordem_roteiro",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pontuacao_producao",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 303444,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 3,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "fat_pontuacao_producao",
+      "coluna": "id_item",
+      "tabela_ref": "dim_item",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 303444,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 5583,
+        "coluna_ref": "id_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "ponte_pedido_configuracao_ordem",
+      "coluna": "id_pedido",
+      "tabela_ref": "fat_pedido",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_pedido"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 1024551,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 61260,
+        "coluna_ref": "id_pedido",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "ponte_pedido_configuracao_ordem",
+      "coluna": "id_ordem_fabricacao",
+      "tabela_ref": "fat_ordem_fabricacao",
+      "ambiguo": null,
+      "candidatos": [
+        "fat_ordem_fabricacao"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 1024551,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 341410,
+        "coluna_ref": "id_ordem_fabricacao",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_empresa",
+      "coluna": "id_cidade",
+      "tabela_ref": "dim_cidade",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_cidade"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 40,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 7,
+        "coluna_ref": "id_cidade",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_estabelecimento",
+      "coluna": "id_cliente",
+      "tabela_ref": "dim_cliente",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_cliente"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 7910,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 7108,
+        "coluna_ref": "id_cliente",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_estabelecimento",
+      "coluna": "id_cidade",
+      "tabela_ref": "dim_cidade",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_cidade"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 7910,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 536,
+        "coluna_ref": "id_cidade",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_item_empresa",
+      "coluna": "id_empresa",
+      "tabela_ref": "dim_empresa",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_empresa"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 174442,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 29,
+        "coluna_ref": "id_empresa",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_item_ordem",
+      "coluna": "id_item",
+      "tabela_ref": "dim_item",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_item"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 174449,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 125256,
+        "coluna_ref": "id_item",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_condicao_pagamento_parcela",
+      "coluna": "id_condicao_pagamento",
+      "tabela_ref": "dim_condicao_pagamento",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_condicao_pagamento"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 893,
+        "nulos": 0,
+        "orfaos": 0,
+        "distintos": 204,
+        "coluna_ref": "id_condicao_pagamento",
+        "pct_orfaos": 0.0
+      }
+    },
+    {
+      "tabela": "dim_centro_trabalho",
+      "coluna": "id_centro_custo",
+      "tabela_ref": "dim_centro_custo",
+      "ambiguo": null,
+      "candidatos": [
+        "dim_centro_custo"
+      ],
+      "nota": null,
+      "validacao": {
+        "total": 137,
+        "nulos": 0,
+        "orfaos": 88,
+        "distintos": 73,
+        "coluna_ref": "id_centro_custo",
+        "pct_orfaos": 64.234
+      }
+    }
+  ]
+}

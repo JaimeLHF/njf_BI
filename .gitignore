@@ -1,0 +1,8 @@
+*.duckdb
+.env
+.venv/
+__pycache__/
+docs/catalogo.json
+erp_bi.dump
+reports/
+restore.log

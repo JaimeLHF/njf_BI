@@ -1,0 +1,23 @@
+[project]
+name = "njf-bi"
+version = "0.1.0"
+description = "BI local sobre DW erp_bi (star schema) - escopo vendas e producao"
+readme = "README.md"
+authors = [
+    { name = "JaimeLHF", email = "jaimehansenfilho@gmail.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-core>=1.12.3",
+    "dbt-duckdb>=1.11.0",
+    "duckdb>=1.5.5",
+    "jupyter>=1.1.1",
+    "plotly>=7.0.0",
+    "polars>=1.44.1",
+    "psycopg2-binary>=2.9.12",
+    "python-dotenv>=1.2.3",
+    "ydata-profiling>=4.18.4",
+]
+
+[tool.uv]
+package = false
