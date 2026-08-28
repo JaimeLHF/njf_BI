@@ -27,3 +27,7 @@ target/
 dbt_packages/
 logs/
 .playwright-mcp/
+
+# screenshots do app com dados reais na tela
+*.png
+.user.yml
