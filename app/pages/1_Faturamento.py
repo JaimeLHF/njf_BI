@@ -4,11 +4,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import consultas
 import estilo
 import tema
 from componentes import card_grafico, card_kpi
-from dados import (brl, consulta, delta_pct, filtro_lista, numero, opcoes,
-                   periodo)
+from dados import (PUBLICACAO, brl, delta_pct, filtro_lista, numero, opcoes,
+                   periodo, recorte, rodape_publicacao)
 
 st.set_page_config(page_title="Faturamento", page_icon="💰", layout="wide")
 estilo.aplicar()
@@ -23,26 +24,38 @@ canais = opcoes("fct_faturamento", "canal_venda")
 
 with st.sidebar:
     st.header("Filtros")
-    de, ate = st.date_input(
-        "Período",
-        value=(max(inicio_base, fim_base.replace(year=fim_base.year - 2)),
-               fim_base),
-        min_value=inicio_base, max_value=fim_base)
-    sel_empresa = st.multiselect("Empresa", empresas)
-    sel_canal = st.multiselect("Canal de venda", canais)
+    if PUBLICACAO:
+        r = recorte()
+        de, ate = r["faturamento_de"], r["faturamento_ate"]
+        sel_empresa, sel_canal, so_financeiro, sem_devolucao = [], [], True, True
+        st.info(
+            f"Recorte fixo: **{de:%b/%Y} a {ate:%b/%Y}**, só NF que gera "
+            "financeiro e sem devolução.\n\nA versão publicada usa um arquivo "
+            "agregado, sem o grão de item — por isso não há filtros. Os "
+            "critérios são os mesmos que a versão local abre por padrão.",
+            icon="🔒")
+    else:
+        de, ate = st.date_input(
+            "Período",
+            value=(max(inicio_base, fim_base.replace(year=fim_base.year - 2)),
+                   fim_base),
+            min_value=inicio_base, max_value=fim_base)
+        sel_empresa = st.multiselect("Empresa", empresas)
+        sel_canal = st.multiselect("Canal de venda", canais)
 
-    st.divider()
-    st.caption("**Filtros de natureza da operação**")
-    so_financeiro = st.checkbox(
-        "Só NF que gera financeiro", value=True,
-        help="Dos 412 tipos de NF, só 158 geram financeiro. Sem isso o total "
-             "mistura remessa, bonificação e amostra com venda.")
-    sem_devolucao = st.checkbox(
-        "Excluir devoluções", value=True,
-        help="Redundante enquanto o filtro acima estiver ligado: todas as 957 "
-             "notas de devolução já são de tipos que não geram financeiro. "
-             "Fica aqui porque a classificação é por texto na descrição do "
-             "tipo de NF, e a lista definitiva de CFOPs precisa vir da fiscal.")
+        st.divider()
+        st.caption("**Filtros de natureza da operação**")
+        so_financeiro = st.checkbox(
+            "Só NF que gera financeiro", value=True,
+            help="Dos 412 tipos de NF, só 158 geram financeiro. Sem isso o total "
+                 "mistura remessa, bonificação e amostra com venda.")
+        sem_devolucao = st.checkbox(
+            "Excluir devoluções", value=True,
+            help="Redundante enquanto o filtro acima estiver ligado: todas as "
+                 "957 notas de devolução já são de tipos que não geram "
+                 "financeiro. Fica aqui porque a classificação é por texto na "
+                 "descrição do tipo de NF, e a lista definitiva de CFOPs "
+                 "precisa vir da fiscal.")
 
 onde = [
     "data_emissao BETWEEN ? AND ?",
@@ -60,28 +73,15 @@ dias = (ate - de).days or 1
 par_anterior = (de - timedelta(days=dias), de)
 
 # ---------------------------------------------------------------- KPIs
-kpi = consulta(f"""
-    SELECT sum(valor_liquido) AS receita, count(DISTINCT id_nota_saida) AS notas,
-           count(DISTINCT id_cliente) AS clientes, sum(valor_bruto) AS bruto
-    FROM marts.fct_faturamento WHERE {w}
-""", par).iloc[0]
-
+kpi = consultas.fat_kpi(w, par)
 onde_ant = [o for o in onde if not o.startswith("data_emissao")]
-kpi_ant = consulta(f"""
-    SELECT sum(valor_liquido) AS receita FROM marts.fct_faturamento
-    WHERE data_emissao >= ? AND data_emissao < ? AND {' AND '.join(onde_ant)}
-""", par_anterior).iloc[0]
+kpi_ant = consultas.fat_kpi_anterior(" AND ".join(onde_ant), par_anterior)
 
 # Devolução sempre sobre o período inteiro, sem os filtros de natureza da
 # operação: senão o próprio filtro zera o indicador que deveria explicar.
-devolucao = consulta(f"""
-    SELECT coalesce(sum(valor_liquido), 0) AS v,
-           count(DISTINCT id_nota_saida) AS notas
-    FROM marts.fct_faturamento
-    WHERE data_emissao BETWEEN ? AND ? AND eh_devolucao_heuristica
-      AND {filtro_lista('id_empresa', sel_empresa, empresas)}
-      AND {filtro_lista('canal_venda', sel_canal, canais)}
-""", par).iloc[0]
+onde_dim = (f"{filtro_lista('id_empresa', sel_empresa, empresas)} AND "
+            f"{filtro_lista('canal_venda', sel_canal, canais)}")
+devolucao = consultas.fat_devolucao(onde_dim, par)
 
 titulo_periodo.caption(
     f"Período: **{de:%b/%Y} a {ate:%b/%Y}**. A Home mostra só o ano corrente, "
@@ -105,11 +105,7 @@ with d:
 st.write("")
 
 # ------------------------------------------------- série ano contra ano
-mensal = consulta(f"""
-    SELECT year(data_emissao) AS ano, month(data_emissao) AS mes_num,
-           sum(valor_liquido) / 1e6 AS receita
-    FROM marts.fct_faturamento WHERE {w} GROUP BY 1, 2 ORDER BY 1, 2
-""", par)
+mensal = consultas.fat_mensal(w, par)
 
 MESES = ["jan", "fev", "mar", "abr", "mai", "jun",
          "jul", "ago", "set", "out", "nov", "dez"]
@@ -145,11 +141,7 @@ with e:
         "mês em andamento — a queda no fim da linha não é queda de vendas.")
 
 with f:
-    canal = consulta(f"""
-        SELECT coalesce(canal_venda, 'sem canal') AS canal,
-               sum(valor_liquido) / 1e6 AS receita
-        FROM marts.fct_faturamento WHERE {w} GROUP BY 1 ORDER BY 2 DESC
-    """, par)
+    canal = consultas.fat_canal(w, par)
     fig = px.bar(canal.head(8), x="receita", y="canal", orientation="h")
     fig.update_traces(marker_color=tema.AZUL,
                       hovertemplate="%{y}<br>R$ %{x:.1f} mi<extra></extra>")
@@ -161,17 +153,8 @@ st.write("")
 
 g, h = st.columns(2, gap="small")
 with g:
-    canal_mes = consulta(f"""
-        SELECT date_trunc('month', data_emissao) AS mes,
-               coalesce(canal_venda, 'sem canal') AS canal,
-               sum(valor_liquido) / 1e6 AS receita
-        FROM marts.fct_faturamento WHERE {w} GROUP BY 1, 2 ORDER BY 1
-    """, par)
-    top = canal_mes.groupby("canal").receita.sum().nlargest(5).index
-    canal_mes["canal"] = canal_mes.canal.where(canal_mes.canal.isin(top),
-                                               "outros")
-    fig = px.bar(canal_mes.groupby(["mes", "canal"], as_index=False).receita.sum(),
-                 x="mes", y="receita", color="canal")
+    canal_mes = consultas.fat_canal_mes(w, par)
+    fig = px.bar(canal_mes, x="mes", y="receita", color="canal")
     fig.update_yaxes(title="R$ milhões")
     fig.update_xaxes(title=None)
     card_grafico("Composição mensal por canal", tema.aplicar(fig))
@@ -179,14 +162,7 @@ with g:
 with h:
     # Substituiu o gráfico de famílias: cod_familia não tem descrição em lugar
     # nenhum do DW, e um eixo com "33299, 8430" não comunica nada.
-    rep = consulta(f"""
-        SELECT coalesce(nome_representante, 'sem representante') AS nome,
-               sum(valor_liquido) / 1e6 AS receita,
-               count(DISTINCT id_nota_saida) AS notas
-        FROM marts.fct_faturamento WHERE {w}
-        GROUP BY 1 ORDER BY 2 DESC LIMIT 10
-    """, par)
-    rep["ticket"] = rep.receita * 1e6 / rep.notas
+    rep = consultas.fat_representante(w, par)
     fig = px.bar(rep, x="receita", y="nome", orientation="h",
                  custom_data=["notas", "ticket"])
     fig.update_traces(
@@ -197,18 +173,12 @@ with h:
     fig.update_xaxes(title="R$ milhões")
     card_grafico(
         "Top 10 representantes", tema.aplicar(fig),
-        "Não há gráfico por família: são 2.584 famílias sem descrição no DW e "
-        "sem nível hierárquico acima — o eixo sairia só com códigos.")
+        ("Nomes trocados por apelido nesta versão." if PUBLICACAO else
+         "Não há gráfico por família: são 2.584 famílias sem descrição no DW "
+         "e sem nível hierárquico acima — o eixo sairia só com códigos."))
 
 # ---------------------------------------------------------------- rodapé
-removido = consulta(f"""
-    SELECT count(DISTINCT id_nota_saida) FILTER (WHERE NOT gera_financeiro) AS sem_fin,
-           count(DISTINCT id_nota_saida) FILTER (WHERE eh_devolucao_heuristica) AS devol
-    FROM marts.fct_faturamento
-    WHERE data_emissao BETWEEN ? AND ?
-      AND {filtro_lista('id_empresa', sel_empresa, empresas)}
-      AND {filtro_lista('canal_venda', sel_canal, canais)}
-""", par).iloc[0]
+removido = consultas.fat_removido(onde_dim, par)
 
 partes = []
 if so_financeiro:
@@ -219,3 +189,5 @@ if sem_devolucao:
 st.caption("Os filtros padrão removeram " + " e ".join(partes) + "."
            if partes else "Nenhum filtro de natureza da operação está ativo — "
                           "o total mistura venda com remessa e devolução.")
+
+rodape_publicacao()

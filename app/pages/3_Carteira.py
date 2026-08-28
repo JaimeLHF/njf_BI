@@ -2,10 +2,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import consultas
 import estilo
 import tema
 from componentes import card_grafico, card_kpi, card_texto
-from dados import brl, consulta, filtro_lista, numero, opcoes, pct
+from dados import (PUBLICACAO, brl, consulta, filtro_lista, numero, opcoes,
+                   pct, rodape_publicacao)
 
 st.set_page_config(page_title="Carteira", page_icon="📋", layout="wide")
 estilo.aplicar()
@@ -18,27 +20,38 @@ st.caption("Posição de **hoje**, não um período: itens de pedido ainda não 
 # ---------------------------------------------------------------- filtros
 empresas = opcoes("fct_pedido", "id_empresa")
 canais = opcoes("fct_pedido", "canal_venda")
-anos = consulta("""
+anos = [] if PUBLICACAO else consulta("""
     SELECT DISTINCT year(data_entrega_prevista) AS a FROM marts.fct_pedido
     WHERE data_entrega_prevista IS NOT NULL ORDER BY 1
 """).a.tolist()
 
 with st.sidebar:
     st.header("Filtros")
-    sel_ano = st.multiselect("Ano de entrega prevista", anos)
-    sel_empresa = st.multiselect("Empresa", empresas)
-    sel_canal = st.multiselect("Canal de venda", canais)
+    if PUBLICACAO:
+        sel_ano, sel_empresa, sel_canal = [], [], []
+        so_converte = so_plausivel = True
+        st.info(
+            "Recorte fixo: itens em aberto, só de origens que faturam e com "
+            "quantidade plausível.\n\nA versão publicada usa um arquivo "
+            "agregado, sem o grão do item de pedido — por isso não há filtros. "
+            "Os critérios são os mesmos que a versão local abre por padrão.",
+            icon="🔒")
+    else:
+        sel_ano = st.multiselect("Ano de entrega prevista", anos)
+        sel_empresa = st.multiselect("Empresa", empresas)
+        sel_canal = st.multiselect("Canal de venda", canais)
 
-    st.divider()
-    st.caption("**Filtros de integridade**")
-    so_converte = st.checkbox(
-        "Só origens que faturam", value=True,
-        help="A origem SIM são R$ 2,6 bi que nunca geraram nota nem ordem de "
-             "fabricação em cinco anos. Sem este filtro a carteira dá R$ 2,8 bi.")
-    so_plausivel = st.checkbox(
-        "Só quantidade plausível", value=True,
-        help="Remove 155 itens com quantidade irreal — digitação duplicada e "
-             "quantidade acima de 10x o p99 do próprio item.")
+        st.divider()
+        st.caption("**Filtros de integridade**")
+        so_converte = st.checkbox(
+            "Só origens que faturam", value=True,
+            help="A origem SIM são R$ 2,6 bi que nunca geraram nota nem ordem "
+                 "de fabricação em cinco anos. Sem este filtro a carteira dá "
+                 "R$ 2,8 bi.")
+        so_plausivel = st.checkbox(
+            "Só quantidade plausível", value=True,
+            help="Remove 155 itens com quantidade irreal — digitação duplicada "
+                 "e quantidade acima de 10x o p99 do próprio item.")
 
 onde = ["situacao_pedido <> 'C'", "quantidade_em_aberto > 0",
         filtro_lista("id_empresa", sel_empresa, empresas),
@@ -62,19 +75,7 @@ AGING = """
 """
 
 # ---------------------------------------------------------------- KPIs
-kpi = consulta(f"""
-    SELECT sum(valor_em_aberto) AS carteira,
-           count(DISTINCT id_pedido) AS pedidos,
-           100.0 * sum(valor_em_aberto) FILTER (
-               WHERE data_entrega_prevista < current_date)
-                 / nullif(sum(valor_em_aberto), 0) AS pct_vencida,
-           100.0 * sum(valor_em_aberto) FILTER (
-               WHERE data_entrega_prevista < current_date - INTERVAL 1 YEAR)
-                 / nullif(sum(valor_em_aberto), 0) AS pct_velha,
-           (SELECT median(dias_ate_primeiro_faturamento)
-              FROM marts.fct_pedido WHERE tem_faturamento) AS dias
-    FROM marts.fct_pedido WHERE {w}
-""").iloc[0]
+kpi = consultas.cart_kpi(w)
 
 a, b, c, d = st.columns(4, gap="small")
 with a:
@@ -111,11 +112,7 @@ cor = {"vencida ha mais de 1 ano": tema.VERMELHO,
        "vencida ha menos de 1 ano": tema.AMBAR,
        "a vencer": tema.AZUL, "sem data prevista": tema.CINZA}
 
-aging = consulta(f"""
-    SELECT {AGING} AS faixa, sum(valor_em_aberto) / 1e6 AS valor,
-           count(DISTINCT id_pedido) AS pedidos
-    FROM marts.fct_pedido WHERE {w} GROUP BY 1
-""")
+aging = consultas.cart_aging(w)
 aging["ord"] = aging.faixa.map({f: i for i, f in enumerate(ordem_aging)})
 aging = aging.sort_values("ord")
 
@@ -152,15 +149,7 @@ st.write("")
 
 g, h = st.columns(2, gap="small")
 with g:
-    mensal = consulta(f"""
-        SELECT date_trunc('month', data_entrega_prevista) AS mes,
-               sum(valor_em_aberto) / 1e6 AS valor,
-               data_entrega_prevista < current_date AS vencida
-        FROM marts.fct_pedido
-        WHERE {w} AND data_entrega_prevista IS NOT NULL
-          AND data_entrega_prevista >= current_date - INTERVAL 3 YEAR
-        GROUP BY 1, 3 ORDER BY 1
-    """)
+    mensal = consultas.cart_mensal(w)
     mensal["situacao"] = mensal.vencida.map({True: "vencida", False: "a vencer"})
     fig = px.bar(mensal, x="mes", y="valor", color="situacao",
                  color_discrete_map={"vencida": tema.VERMELHO,
@@ -170,11 +159,7 @@ with g:
     card_grafico("Carteira por mês de entrega prevista", tema.aplicar(fig))
 
 with h:
-    canal = consulta(f"""
-        SELECT coalesce(canal_venda, 'sem canal') AS canal,
-               sum(valor_em_aberto) / 1e6 AS valor
-        FROM marts.fct_pedido WHERE {w} GROUP BY 1 ORDER BY 2 DESC LIMIT 10
-    """)
+    canal = consultas.cart_canal(w)
     fig = px.bar(canal, x="valor", y="canal", orientation="h")
     fig.update_traces(marker_color=tema.AZUL,
                       hovertemplate="%{y}<br>R$ %{x:.1f} mi<extra></extra>")
@@ -185,12 +170,7 @@ with h:
 st.write("")
 
 onde_funil = [o for o in onde if o != "quantidade_em_aberto > 0"]
-funil = consulta(f"""
-    SELECT status_faturamento, count(*) AS itens,
-           sum(valor_item_liquido) / 1e6 AS valor
-    FROM marts.fct_pedido WHERE {' AND '.join(onde_funil)}
-    GROUP BY 1 ORDER BY 2 DESC
-""")
+funil = consultas.cart_funil(" AND ".join(onde_funil))
 fig = px.bar(funil, x="status_faturamento", y="itens", text="itens",
              custom_data=["valor"])
 fig.update_traces(marker_color=tema.AZUL, texttemplate="%{text:,}",
@@ -203,21 +183,17 @@ card_grafico("Conversão do pedido em faturamento", tema.aplicar(fig, 280),
              "Todos os itens do recorte, não só os em aberto.")
 
 # ---------------------------------------------------------------- rodapé
+removido = consultas.cart_removido()
 partes = []
 if so_converte:
-    r = consulta("""
-        SELECT round(sum(valor_item_liquido) / 1e6, 0) AS v
-        FROM marts.fct_pedido WHERE NOT origem_converte_em_nf
-    """).iloc[0].v
-    partes.append(f"**R$ {r:,.0f} mi** de origens que nunca geram NF (`SIM`, "
-                  "`EXP`, `ORC`)".replace(",", "."))
+    partes.append(f"**R$ {removido.mi_origem:,.0f} mi** de origens que nunca "
+                  "geram NF (`SIM`, `EXP`, `ORC`)".replace(",", "."))
 if so_plausivel:
-    r = consulta("""
-        SELECT count(*) AS n FROM marts.fct_pedido
-        WHERE NOT valor_pedido_plausivel
-    """).iloc[0].n
-    partes.append(f"**{r} itens** com quantidade implausível")
+    partes.append(f"**{removido.itens_implausiveis} itens** com quantidade "
+                  "implausível")
 st.caption("Os filtros padrão removeram " + " e ".join(partes) + "."
            if partes else
            "Nenhum filtro de integridade ativo — a carteira inclui origens que "
            "nunca faturam e itens com quantidade irreal.")
+
+rodape_publicacao()

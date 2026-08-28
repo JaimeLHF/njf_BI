@@ -2,10 +2,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import consultas
 import estilo
 import tema
 from componentes import card_grafico, card_kpi
-from dados import consulta, filtro_lista, numero, opcoes, pct, periodo
+from dados import (PUBLICACAO, filtro_lista, numero, opcoes, pct, periodo,
+                   rodape_publicacao)
 
 st.set_page_config(page_title="Produção", page_icon="🏭", layout="wide")
 estilo.aplicar()
@@ -27,23 +29,33 @@ tipos = opcoes("fct_ordem_producao", "tipo_ordem")
 
 with st.sidebar:
     st.header("Filtros")
-    de, ate = st.date_input(
-        "Conclusão real entre",
-        value=(max(inicio, fim.replace(year=fim.year - 2)), fim),
-        min_value=inicio, max_value=fim)
-    sel_empresa = st.multiselect("Empresa", empresas)
-    sel_tipo = st.multiselect("Tipo de ordem", tipos)
+    if PUBLICACAO:
+        de, ate = inicio, fim
+        sel_empresa, sel_tipo, so_ativas, so_apontadas = [], [], True, True
+        st.info(
+            f"Recorte fixo: ordens concluídas de **{de:%b/%Y} a {ate:%b/%Y}**, "
+            "só ativas e com apontamento.\n\nA versão publicada usa um arquivo "
+            "agregado, sem o grão da ordem — por isso não há filtros. Os "
+            "critérios são os mesmos que a versão local abre por padrão.",
+            icon="🔒")
+    else:
+        de, ate = st.date_input(
+            "Conclusão real entre",
+            value=(max(inicio, fim.replace(year=fim.year - 2)), fim),
+            min_value=inicio, max_value=fim)
+        sel_empresa = st.multiselect("Empresa", empresas)
+        sel_tipo = st.multiselect("Tipo de ordem", tipos)
 
-    st.divider()
-    st.caption("**Recorte de ordens**")
-    so_ativas = st.checkbox(
-        "Só ordens ativas", value=True,
-        help="cod_situacao = 1. As de situação 0 praticamente não produziram: "
-             "132 de 54.539.")
-    so_apontadas = st.checkbox(
-        "Só ordens com apontamento", value=True,
-        help="Sem apontamento não há conclusão real, e a ordem não entra no "
-             "cálculo de prazo de nenhum jeito.")
+        st.divider()
+        st.caption("**Recorte de ordens**")
+        so_ativas = st.checkbox(
+            "Só ordens ativas", value=True,
+            help="cod_situacao = 1. As de situação 0 praticamente não "
+                 "produziram: 132 de 54.539.")
+        so_apontadas = st.checkbox(
+            "Só ordens com apontamento", value=True,
+            help="Sem apontamento não há conclusão real, e a ordem não entra "
+                 "no cálculo de prazo de nenhum jeito.")
 
 onde = [
     "data_conclusao_real BETWEEN ? AND ?",
@@ -58,17 +70,7 @@ w = " AND ".join(onde)
 par = (de, ate)
 
 # ---------------------------------------------------------------- KPIs
-kpi = consulta(f"""
-    SELECT count(*) AS ordens,
-           100.0 * count(*) FILTER (WHERE no_prazo)
-                 / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0) AS pct_real,
-           100.0 * count(*) FILTER (WHERE atraso_dias_por_data_fim <= 0)
-                 / nullif(count(*) FILTER (WHERE atraso_dias_por_data_fim IS NOT NULL), 0)
-                                                                     AS pct_antigo,
-           median(atraso_dias) AS mediana,
-           100.0 * count(*) FILTER (WHERE tem_apontamento) / count(*) AS pct_apontada
-    FROM marts.fct_ordem_producao WHERE {w}
-""", par).iloc[0]
+kpi = consultas.prod_kpi(w, par)
 
 titulo_periodo.caption(
     f"Ordens concluídas entre **{de:%b/%Y} e {ate:%b/%Y}**. A Home mostra a "
@@ -101,15 +103,7 @@ if kpi.pct_real and kpi.pct_antigo:
 st.write("")
 
 # ---------------------------------------------------------------- gráficos
-mensal = consulta(f"""
-    SELECT date_trunc('month', data_conclusao_real) AS mes,
-           100.0 * count(*) FILTER (WHERE no_prazo)
-                 / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0) AS real,
-           100.0 * count(*) FILTER (WHERE atraso_dias_por_data_fim <= 0)
-                 / nullif(count(*) FILTER (WHERE atraso_dias_por_data_fim IS NOT NULL), 0)
-                                                                     AS antigo
-    FROM marts.fct_ordem_producao WHERE {w} GROUP BY 1 ORDER BY 1
-""", par)
+mensal = consultas.prod_mensal(w, par)
 
 e, f = st.columns([3, 2], gap="small")
 with e:
@@ -125,11 +119,12 @@ with e:
                  tema.aplicar(fig, tema.ALTURA_LINHA, unificado=True))
 
 with f:
-    dist = consulta(f"""
-        SELECT atraso_dias FROM marts.fct_ordem_producao
-        WHERE {w} AND atraso_dias BETWEEN -120 AND 120
-    """, par)
-    fig = px.histogram(dist, x="atraso_dias", nbins=60)
+    dist = consultas.prod_atraso(w, par)
+    if PUBLICACAO:
+        # já vem binado de 4 em 4 dias pelo gerador
+        fig = px.bar(dist, x="bin_inicio", y="ordens")
+    else:
+        fig = px.histogram(dist, x="atraso_dias", nbins=60)
     fig.update_traces(marker_color=tema.AZUL_CLARO,
                       hovertemplate="%{x} dias<br>%{y:,} ordens<extra></extra>")
     fig.add_vline(x=0, line_color=tema.VERMELHO, line_width=2)
@@ -146,18 +141,7 @@ st.write("")
 # faixas, tem resposta "sim".
 g, h = st.columns(2, gap="small")
 with g:
-    tamanho = consulta(f"""
-        SELECT CASE WHEN quantidade_prevista <= 1   THEN '1 unidade'
-                    WHEN quantidade_prevista <= 5   THEN '2 a 5'
-                    WHEN quantidade_prevista <= 20  THEN '6 a 20'
-                    WHEN quantidade_prevista <= 100 THEN '21 a 100'
-                    ELSE 'mais de 100' END AS faixa,
-               min(quantidade_prevista) AS ord, count(*) AS ordens,
-               100.0 * count(*) FILTER (WHERE no_prazo)
-                     / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0) AS pct
-        FROM marts.fct_ordem_producao WHERE {w} AND quantidade_prevista IS NOT NULL
-        GROUP BY 1 ORDER BY 2
-    """, par)
+    tamanho = consultas.prod_tamanho(w, par)
     fig = px.bar(tamanho, x="faixa", y="pct", custom_data=["ordens"])
     fig.update_traces(
         marker_color=tema.AZUL,
@@ -173,17 +157,7 @@ with g:
         "lote pequeno.")
 
 with h:
-    operacoes = consulta(f"""
-        SELECT CASE WHEN qtd_operacoes <= 2  THEN '1 a 2'
-                    WHEN qtd_operacoes <= 5  THEN '3 a 5'
-                    WHEN qtd_operacoes <= 10 THEN '6 a 10'
-                    ELSE '11 ou mais' END AS faixa,
-               min(qtd_operacoes) AS ord, count(*) AS ordens,
-               100.0 * count(*) FILTER (WHERE no_prazo)
-                     / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0) AS pct
-        FROM marts.fct_ordem_producao WHERE {w} AND qtd_operacoes IS NOT NULL
-        GROUP BY 1 ORDER BY 2
-    """, par)
+    operacoes = consultas.prod_operacoes(w, par)
     fig = px.bar(operacoes, x="faixa", y="pct", custom_data=["ordens"])
     fig.update_traces(
         marker_color=tema.AMBAR,
@@ -204,3 +178,5 @@ st.caption(
     "maior que a produzida em 54.439 de 54.494 ordens e a semântica não foi "
     "confirmada com o ERP. Também não há corte por linha de produção: os 272 "
     "códigos não têm descrição no DW.")
+
+rodape_publicacao()

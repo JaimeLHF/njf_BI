@@ -1,11 +1,29 @@
-*.duckdb
+# --- dados sensíveis: nunca no repo ---
+# (comentário tem de ficar em linha própria: inline vira parte do padrão)
 .env
+erp_bi.dump
+restore.log
+
+# marts no grão de item, pedido e ordem
+dados.duckdb
+
+# de-para de representantes e outros segredos locais
+.local/
+
+# profiling com valores reais
+reports/
+
+# catálogo bruto do Postgres
+docs/catalogo.json
+
+# dados_pub.duckdb ENTRA no repo: é agregado e anonimizado, auditado por
+# scripts/08_auditar_publicacao.py
+!dados_pub.duckdb
+
+# --- ambiente e artefatos ---
 .venv/
 __pycache__/
-dbt_packages/
-docs/catalogo.json
-erp_bi.dump
-logs/
-reports/
-restore.log
 target/
+dbt_packages/
+logs/
+.playwright-mcp/

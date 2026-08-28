@@ -2,14 +2,28 @@
 
 Regra do projeto: nada aqui lê de `raw` nem de `staging`. `raw` continua
 consultável para demonstrar a triplicação, mas não alimenta indicador.
+
+Dois modos:
+  - local (padrão): `dados.duckdb`, no grão dos marts, filtros livres.
+  - publicação (`MODO_PUBLICACAO=1`): `dados_pub.duckdb`, só tabelas agregadas,
+    recorte fixo. É o que vai para o Streamlit Community Cloud.
+
+As páginas não sabem em qual modo estão: perguntam a `consultas.py`.
 """
+import os
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 import streamlit as st
 
-BANCO = Path(__file__).resolve().parent.parent / "dados.duckdb"
+RAIZ = Path(__file__).resolve().parent.parent
+PUBLICACAO = os.environ.get("MODO_PUBLICACAO", "0") == "1"
+BANCO = RAIZ / ("dados_pub.duckdb" if PUBLICACAO else "dados.duckdb")
+
+AVISO_PUBLICACAO = (
+    "Versão de demonstração com dados agregados e anonimizados."
+)
 
 
 @st.cache_resource
@@ -23,7 +37,19 @@ def consulta(sql: str, params: tuple = ()) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
+def recorte() -> dict:
+    """Janela fixa do arquivo publicado. No modo local devolve vazio."""
+    if not PUBLICACAO:
+        return {}
+    return consulta("SELECT * FROM pub_recorte").iloc[0].to_dict()
+
+
+@st.cache_data(ttl=3600)
 def opcoes(tabela: str, coluna: str, onde: str = "1=1") -> list:
+    """Vazio no modo publicação: o arquivo agregado não tem o grão para
+    alimentar filtro, e as páginas escondem os multiselect nesse modo."""
+    if PUBLICACAO:
+        return []
     df = consulta(
         f"SELECT DISTINCT {coluna} AS v FROM marts.{tabela} "
         f"WHERE {onde} AND {coluna} IS NOT NULL ORDER BY 1"
@@ -33,6 +59,12 @@ def opcoes(tabela: str, coluna: str, onde: str = "1=1") -> list:
 
 @st.cache_data(ttl=3600)
 def periodo(tabela: str, coluna: str) -> tuple:
+    """No modo publicação vem de pub_recorte, a janela fixa do arquivo."""
+    if PUBLICACAO:
+        r = recorte()
+        if tabela == "fct_faturamento":
+            return r["faturamento_de"], r["faturamento_ate"]
+        return r["producao_de"], r["producao_ate"]
     df = consulta(f"SELECT min({coluna}) a, max({coluna}) b FROM marts.{tabela}")
     return df["a"].iloc[0], df["b"].iloc[0]
 
@@ -45,6 +77,12 @@ def filtro_lista(coluna: str, selecionados: list, todos: list) -> str:
         "'" + str(v).replace("'", "''") + "'" for v in selecionados
     )
     return f"{coluna} IN ({valores})"
+
+
+def rodape_publicacao() -> None:
+    """Aviso no pé de toda página, só no modo publicação."""
+    if PUBLICACAO:
+        st.caption(f":gray[{AVISO_PUBLICACAO}]")
 
 
 def brl(v, casas=1) -> str:

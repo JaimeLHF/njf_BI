@@ -1,0 +1,7 @@
+# Streamlit Community Cloud não usa uv: versões fixas, só o que o app precisa.
+# O pipeline de dados (dbt, polars, ydata-profiling) fica fora — ele roda local.
+duckdb==1.5.5
+numpy==2.3.5
+pandas==2.3.3
+plotly==7.0.0
+streamlit==1.62.0

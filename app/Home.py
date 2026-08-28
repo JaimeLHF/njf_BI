@@ -4,7 +4,8 @@ import streamlit as st
 
 import estilo
 from componentes import card_kpi
-from dados import brl, consulta, pct
+import consultas
+from dados import PUBLICACAO, brl, pct, rodape_publicacao
 
 st.set_page_config(page_title="BI — Vendas e Produção", page_icon="📊",
                    layout="wide")
@@ -16,18 +17,7 @@ st.caption("Dados do DW `erp_bi`. Todos os números saem da camada `marts`, "
 
 ano = date.today().year
 
-resumo = consulta("""
-    SELECT
-        (SELECT round(sum(valor_liquido) / 1e6, 1) FROM marts.fct_faturamento
-          WHERE gera_financeiro AND NOT eh_devolucao_heuristica
-            AND year(data_emissao) = year(current_date))            AS fat_ano,
-        (SELECT round(100.0 * count(*) FILTER (WHERE no_prazo)
-                      / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0), 1)
-           FROM marts.fct_ordem_producao WHERE cod_situacao = 1)     AS no_prazo,
-        (SELECT round(sum(valor_em_aberto) / 1e6, 1) FROM marts.fct_pedido
-          WHERE origem_converte_em_nf AND valor_pedido_plausivel
-            AND situacao_pedido <> 'C')                              AS carteira
-""").iloc[0]
+resumo = consultas.home_kpi()
 
 a, b, c = st.columns(3, gap="small")
 with a:
@@ -81,6 +71,17 @@ R$ 2,6 bilhões que nunca geraram nota nem ordem de fabricação. Com os dois
 cuidados, a carteira é R$ 189 milhões em vez de R$ 2,8 bilhões.
 """)
 
-st.info("Cada página traz, no rodapé, o que os filtros padrão removeram. "
-        "Desligar um filtro é legítimo — desligar sem saber o que ele fazia, não.",
-        icon="ℹ️")
+if PUBLICACAO:
+    st.info(
+        "**Versão de demonstração.** Os dados são agregados e anonimizados: "
+        "não há nome de cliente, representante, produto ou qualquer chave que "
+        "identifique uma entidade. Os filtros ficam desativados porque o "
+        "arquivo publicado é um recorte fixo — os últimos dois anos, com os "
+        "mesmos critérios que a versão local abre por padrão. Os números são "
+        "os mesmos.", icon="🔒")
+else:
+    st.info("Cada página traz, no rodapé, o que os filtros padrão removeram. "
+            "Desligar um filtro é legítimo — desligar sem saber o que ele "
+            "fazia, não.", icon="ℹ️")
+
+rodape_publicacao()

@@ -38,6 +38,9 @@ dados.duckdb   schema raw com as 34 tabelas migradas (gitignored)
 | `04_migrar_duckdb.py` | Postgres → `raw` no DuckDB | `dados.duckdb` |
 | `05_profiling.py` | perfila as tabelas migradas | `reports/*.html` |
 | `06_qualidade.py` | checks de qualidade | `docs/qualidade.md` |
+| `07_gerar_publicacao.py` | agrega e anonimiza para publicar | `dados_pub.duckdb` |
+| `08_auditar_publicacao.py` | portão de privacidade | falha se achar PII |
+| `09_comparar_publicacao.py` | paridade publicado × completo | falha se divergir |
 
 Depois da migração, construir a camada staging (é ela que corrige a
 triplicação; `06_qualidade.py` mede o efeito):
@@ -137,6 +140,30 @@ Detalhe completo com contagens em `docs/modelo.md`.
 - Commit ao final de cada etapa.
 - Documentação gerada por script, nunca escrita à mão — reexecutar o script é o
   jeito de atualizar.
+
+## Publicação
+
+O app roda em dois modos. `MODO_PUBLICACAO=1` troca `dados.duckdb` por
+`dados_pub.duckdb`, que tem **uma tabela agregada por gráfico** e nenhum grão de
+item, pedido, nota ou ordem.
+
+`app/consultas.py` é a fronteira: uma função por visual, que decide a fonte.
+As páginas nunca montam SQL contra os marts direto — se montassem, o modo
+publicação quebraria.
+
+Regras de anonimização, garantidas por `07` e verificadas por `08`:
+
+- nada de nome, CNPJ, CPF ou código de cliente; nada de código de item,
+  família ou ordem
+- representante vira "Representante A", "B", …; o de-para fica em `.local/`
+- grupo com menos de 5 registros vira "Outros"
+- **um canal só mantém o nome próprio se tiver ao menos 5 clientes distintos.**
+  Um canal com um cliente é o nome desse cliente com outro rótulo — foi
+  exatamente o que a auditoria pegou na primeira rodada.
+
+Antes de publicar, os três scripts em sequência. `08` confronta todo texto do
+arquivo contra os 7.760 nomes reais das dimensões; `09` exige que 17 KPIs
+batam com o banco completo. Ambos saem com código 1 se falharem.
 
 ## Convenção de severidade nos testes dbt
 
