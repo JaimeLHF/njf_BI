@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: fct_faturamento
+    description: >
+      Faturamento no grão de item de nota fiscal de saída, de 2021-01 a 2026-08.
+      Não filtra natureza da operação: `gera_financeiro`, `movimenta_estoque` e
+      `eh_devolucao_heuristica` ficam expostos para o consumidor decidir. Sem
+      filtro, o total mistura venda com remessa, bonificação e devolução.
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_nota_saida_item]
+    columns:
+      - name: id_nota_saida_item
+        description: "Chave. Um item de NF de saída."
+        tests: [not_null]
+      - name: id_nota_saida
+        tests: [not_null]
+      - name: id_cliente
+        description: "Cliente da nota. O pedido não tem cliente direto."
+        tests: [not_null]
+      - name: data_emissao
+        tests: [not_null]
+      - name: valor_liquido
+        tests: [not_null]
+      - name: gera_financeiro
+        description: >
+          Vem de dim_tipo_nf_saida.flag_gera_financeiro. Só 158 dos 412 tipos
+          geram financeiro. É este o filtro para "faturamento de verdade".
+      - name: eh_devolucao_heuristica
+        description: >
+          Heurística de texto sobre descricao_tipo_nf, não classificação fiscal.
+          Substituir por lista de CFOPs quando a fiscal confirmar.
+
+  - name: fct_ordem_producao
+    description: >
+      Ordens de fabricação com prazo medido contra a conclusão real, derivada do
+      último apontamento de produção. Não usar data_fim para prazo: é
+      planejamento, anterior ao último apontamento em 98,7% das ordens.
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_ordem_fabricacao]
+    columns:
+      - name: id_ordem_fabricacao
+        description: "Chave. Uma ordem de fabricação."
+        tests: [not_null]
+      - name: num_ordem
+        description: >
+          Número da ordem. É por ele que fat_nota_saida_item_pontuacao se junta,
+          não pelo id.
+        tests: [not_null]
+      - name: data_conclusao_real
+        description: >
+          max(data_apontamento) da ordem, via roteiro. Nula quando a ordem não
+          tem nenhum apontamento — ver tem_apontamento.
+      - name: atraso_dias
+        description: >
+          data_conclusao_real menos data_prevista_fim. Positivo = atrasou.
+          Nulo quando falta uma das duas datas.
+      - name: no_prazo
+        description: "data_conclusao_real <= data_prevista_fim."
+      - name: atraso_dias_por_data_fim
+        description: >
+          O cálculo ingênuo, com data_fim. Está aqui só para a diferença contra
+          atraso_dias ficar visível. Não usar como indicador.
+      - name: quantidade_refugada_nao_confiavel
+        description: >
+          Renomeada de propósito. Maior que a produzida em 54.439 de 54.494
+          ordens: semântica não confirmada com o ERP.
+      - name: lead_time_dias
+        description: >
+          data_conclusao_real menos data_abertura. Negativo em 19,9% das ordens
+          com apontamento: a abertura não é o começo do processo.
+      - name: lead_time_producao_dias
+        description: >
+          Do primeiro ao último apontamento. Nunca negativo. Mediana de 0 dias —
+          a maior parte das ordens tem todo o apontamento no mesmo dia.
+      - name: apontamento_antes_da_abertura
+        description: >
+          Verdadeiro em 24,7% das ordens com apontamento. Onde for verdadeiro,
+          lead_time_dias não significa nada.
+      - name: tem_apontamento
+        description: "Se falso, todas as colunas de prazo real são nulas."

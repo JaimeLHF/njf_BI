@@ -17,7 +17,11 @@ migrado). Toda justificativa abaixo vem de contagem medida em
 
 ## 1. Qual a aderência a prazo das ordens de fabricação? *(obrigatória)*
 
-**Parcial.**
+**Respondível — resolvida em `marts.fct_ordem_producao`.** O texto abaixo é o
+diagnóstico original; a derivação foi implementada e o número mudou muito:
+**32,9% no prazo**, contra 73,7% pelo cálculo ingênuo com `data_fim`. Mediana
+de atraso de +11 dias, contra -13 dias (adiantado) no ingênuo. Ver
+`docs/qualidade.md` seção 10.
 
 O prazo prometido está em `data_prevista_fim` e é confiável. O problema é o
 realizado: **`data_fim` não é a data em que a produção terminou**. Em 296.983
@@ -25,11 +29,11 @@ ordens encerradas com apontamento, 293.261 (**98,7%**) têm `data_fim` anterior
 ao último apontamento de produção, com mediana de **-43 dias**. Comparar
 `data_fim` com `data_prevista_fim` mede plano contra plano.
 
-A data real de conclusão precisa ser derivada:
-`max(fat_ordem_movimento.data_apontamento)` por ordem, via `fat_ordem_roteiro`.
-Com essa derivação a pergunta vira respondível — mas o número muda muito em
-relação ao ingênuo, então vale confirmar a leitura com a produção antes de
-publicar.
+A data real de conclusão foi derivada como
+`max(fat_ordem_movimento.data_apontamento)` por ordem, via `fat_ordem_roteiro`,
+e é a coluna `data_conclusao_real` do mart. O cálculo ingênuo continua
+disponível em `atraso_dias_por_data_fim`, ao lado, para a diferença ficar
+visível em vez de virar discussão.
 
 `data_entrega` é uma terceira data, nula em 9,0% das ordens, e ainda não sabemos
 se é entrega ao cliente ou transferência para expedição — **confirmar com o ERP**.
@@ -80,7 +84,14 @@ Tabelas: `fat_nota_saida`, `fat_nota_saida_item`, `dim_cliente`,
 
 ## 4. Qual o lead time real de produção, da abertura ao último apontamento?
 
-**Respondível.**
+**Parcial — e a pergunta estava mal formulada.** `data_abertura` não é o começo
+do processo: em 24,8% das ordens o primeiro apontamento vem antes dela, e o
+lead time medido da abertura é negativo em 20%. O mart traz
+`lead_time_producao_dias` (primeiro ao último apontamento) ao lado de
+`lead_time_dias`. Mas a mediana desse lead de produção é **zero dias** — quase
+todo apontamento cai num único dia, o que sugere apontamento em lote no
+fechamento. Tempo de ciclo real depende de confirmar o hábito de apontamento
+com a produção.
 
 `fat_ordem_movimento` tem 3.425.536 apontamentos, com `data_apontamento` e
 `usuario_apontamento` preenchidos em 100% e `tempo_apontado > 0` em 91%. Liga a
@@ -193,10 +204,10 @@ Tabelas: `fat_nota_saida`, `fat_nota_saida_item`, `dim_tipo_nf_saida`,
 
 | # | Pergunta | Status |
 |---|----------|--------|
-| 1 | Aderência a prazo de produção | parcial |
+| 1 | Aderência a prazo de produção | **respondível** (implementada) |
 | 2 | Carteira em aberto 2026-2027 | parcial |
-| 3 | Faturamento por ano/canal/representante | respondível |
-| 4 | Lead time real de produção | respondível |
+| 3 | Faturamento por ano/canal/representante | **respondível** (implementada) |
+| 4 | Lead time real de produção | parcial |
 | 5 | Gargalos por centro de trabalho | respondível |
 | 6 | Conversão pedido → faturamento | respondível |
 | 7 | Mix vendido × produzido | respondível |

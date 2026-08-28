@@ -29,6 +29,7 @@ Gerado por `scripts/06_qualidade.py` em 2026-08-28 sobre o schema `raw` do `dado
 | `fat_ordem_fabricacao` | entrega antes do fim de producao | 445 | 0.07% |
 | `fat_pedido` | entrega prevista antes da emissao | 1 | 0.00% |
 | `fat_pedido` | emissao antes da inclusao | 30,429 | 15.00% |
+| `fat_ordem_fabricacao` | abertura no futuro | 7,504 | 1.21% |
 
 **Faixa observada das datas principais**
 
@@ -131,4 +132,67 @@ A correcao esta na camada `staging` do dbt (`models/staging/`), com dedup explic
 | `ponte_nota_item_pedido_item` | 652,017 | 215,658 | 436,359 | 3.023x |
 | `ponte_nota_saida_item_servico` | 40,206 | 10,452 | 29,754 | 3.847x |
 | `ponte_pedido_configuracao_ordem` | 1,024,551 | 341,517 | 683,034 | 3.000x |
+
+
+### Perguntas para a empresa
+
+Nenhuma destas se responde com o dado que temos. Levar para a reuniao.
+
+1. **Quais relatorios consomem essas 9 tabelas hoje?** Power BI, Excel, extracao propria — precisamos da lista para estimar o erro de cada numero ja publicado. Enquanto nao soubermos, todo indicador construido sobre elas esta sob suspeita de estar 3x inflado.
+
+2. **Qual o grao real de `fat_pontuacao_producao`?** `id_pontuacao` nao identifica a linha: sao 40.423 valores para 101.146 linhas distintas, e um unico id cobre 880 itens e 678 datas. Ele e um numero de lote, de apuracao mensal, de documento? Sem isso a dedup fica travada em linha inteira e o indicador de produtividade nao tem grao definido.
+
+3. **O que e `quantidade_refugada` quando e maior que a produzida?** Acontece em 54.439 das 54.494 ordens com valor preenchido. E refugo acumulado do roteiro inteiro, sucata em outra unidade de medida, ou outra grandeza? Enquanto nao souber, nao ha indicador de qualidade de producao.
+
+4. **Qual a diferenca entre `flag_encerrada` e `cod_situacao` na ordem de fabricacao?** 96,2% das ordens com `flag_encerrada = 0` ja produziram quantidade e 98,9% tem previsao de fim no passado. A flag parece encerramento administrativo e `cod_situacao` o status real (1 = ativa, 0 = cancelada), mas isso e leitura nossa. Qual das duas define "ordem em aberto" para a fabrica?
+
+5. **Por que 62 codigos de servico da LC 116 nao tem nenhuma nota vinculada?** Ver a secao 9. Se a base de ISS desses servicos e apurada em outro lugar, precisamos saber onde.
+
+6. **Como a fabrica aponta producao?** A mediana do tempo entre o primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo cai no mesmo dia. Se o apontamento e feito em lote no fechamento, o tempo de ciclo nao esta no dado. E `data_abertura` vem depois do primeiro apontamento em 24,8% das ordens — o que ela marca de fato?
+
+
+## 9. Vinculos fiscais de servico sem base
+
+As 8,850 linhas do sentinela `id_nota_saida_item = 0` foram verificadas: **o servico esta preenchido em todas**. `id_servico` nulo: 0. Servico inexistente em `dim_servico_lei`: 0. Sao 82 servicos da LC 116 distintos, todos validos, apontando para um item de nota fiscal que nao existe.
+
+A ponte tem so duas colunas e nao carrega valor, entao **nao ha receita de servico perdida em reais** — o valor mora em `fat_nota_saida_item.valor_liquido`, e sem item nao ha o que somar. O problema e de cobertura fiscal:
+
+| | servicos LC 116 |
+|---|---:|
+| so aparecem no sentinela (nenhuma nota vinculada) | **62** |
+| aparecem no sentinela e em notas reais | 20 |
+| nunca aparecem no sentinela | 2 |
+| **total na ponte** | **84** |
+
+Em volume de vinculo o sentinela e pequeno: 82 pares distintos contra 10,452 uteis (0.8%). As 8,850 linhas sao esses 82 pares repetidos, nao 8,850 vinculos.
+
+Em cobertura de catalogo o buraco e grande: **62 dos 84 codigos de servico (74%) nao tem uma unica nota atribuida**. Qualquer visao de ISS por tipo de servico vai mostrar esses codigos zerados, e nao da para saber pelo DW se e porque nao houve movimento ou porque o vinculo se perdeu na carga.
+
+A base recuperavel sao os 10,452 itens de NF vinculados, R$ 59.45 milhoes de valor liquido.
+
+
+## 10. Efeito da correcao de prazo nos marts
+
+A ordem em que o prazo e medido muda o indicador em **41 pontos percentuais**. Sobre as ordens ativas (`cod_situacao = 1`):
+
+| | com data_fim (ingenuo) | com o apontamento (real) |
+|---|---:|---:|
+| ordens no prazo | **73.7%** | **32.9%** |
+| mediana do atraso | -13 dias (adiantado) | +11 dias |
+
+Base: 563,819 ordens ativas, 550,985 com apontamento (97.7%). Lead time mediano da abertura a conclusao real: **19 dias**.
+
+O numero ingenuo diz que tres em cada quatro ordens fecham no prazo, e com folga. O numero real diz que uma em cada tres fecha no prazo, com mediana de 11 dias de atraso. **Se algum indicador de produção hoje mostra algo perto de 74%, ele esta medindo o plano contra o plano.**
+
+### `data_abertura` nao e o comeco do processo
+
+Em 110,312 das 550,985 ordens com apontamento (**20.0%**) o `lead_time_dias` da negativo: a producao terminou antes da ordem ser aberta. Olhando o inicio em vez do fim, 136,849 ordens (**24.8%**) tem o primeiro apontamento anterior a abertura — e `data_inicio` ja era anterior a `data_abertura` em 41% das ordens (secao 3).
+
+A leitura: **`data_abertura` e um registro administrativo posterior**, nao a criacao da ordem. Por isso o mart traz `lead_time_producao_dias` (do primeiro ao ultimo apontamento, nunca negativo) ao lado de `lead_time_dias`, mais a flag `apontamento_antes_da_abertura`.
+
+Ressalva sobre o proprio `lead_time_producao_dias`: a mediana e 0 dias — a maior parte das ordens concentra todo o apontamento num unico dia. Ele mede a janela de apontamento, que pode nao ser o tempo real de fabricacao se a fabrica aponta em lote no fechamento. **Confirmar com a producao como e o habito de apontamento** antes de publicar tempo de ciclo.
+
+### Ordens com abertura no futuro
+
+7,476 ordens tem `data_abertura` entre hoje e o fim de 2026: isso e programacao normal, nao defeito. Ja as 28 ordens abertas em 2027 (com apenas 9 apontamentos) sao o que faz o recorte "carteira 2027" parecer existir. Trate 2027 como residual ate a empresa confirmar.
 

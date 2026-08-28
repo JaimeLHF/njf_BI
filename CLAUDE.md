@@ -20,6 +20,7 @@ scripts/   _db.py e os 6 scripts numerados do pipeline
 docs/      dicionario.md, modelo.md, qualidade.md, perguntas.md
 reports/   1 HTML de profiling por tabela (gitignored)
 models/staging/  camada dbt que corrige a triplicação da origem
+models/marts/    fct_faturamento e fct_ordem_producao
 macros/    generate_schema_name
 tests/generic/   teste chave_unica
 notebooks/ análise exploratória
@@ -43,6 +44,10 @@ triplicação; `06_qualidade.py` mede o efeito):
 ```bash
 DBT_PROFILES_DIR=. uv run dbt build
 ```
+
+**Marts.** `marts.fct_faturamento` (grão: item de NF de saída, filtro de
+natureza da operação exposto em `gera_financeiro`) e `marts.fct_ordem_producao`
+(grão: ordem, com `data_conclusao_real` derivada do apontamento).
 
 Rodar tudo:
 
@@ -103,9 +108,20 @@ Todas medidas e registradas em `docs/qualidade.md`.
    Isso afeta relatórios que a empresa já tenha em cima dessas tabelas —
    ver `docs/qualidade.md` seção 8.
 
+   > **`raw` fica consultável de propósito.** É a evidência da triplicação para
+   > a apresentação — não revogar o acesso nem renomear o schema. Mas nenhum
+   > modelo, notebook ou dashboard deve ler de `raw`: leia de `staging`.
+
 3. **`fat_ordem_fabricacao.data_fim` não é a data real de término.** É anterior
    ao último apontamento em 98,7% das ordens encerradas (mediana -43 dias).
-   A conclusão real é `max(fat_ordem_movimento.data_apontamento)` por ordem.
+   A conclusão real é `max(fat_ordem_movimento.data_apontamento)` por ordem,
+   já materializada em `fct_ordem_producao.data_conclusao_real`. O indicador
+   muda **41 pontos**: 32,9% no prazo contra 73,7% pelo cálculo ingênuo.
+
+   **`data_abertura` também não é o começo.** Em 24,8% das ordens o primeiro
+   apontamento vem antes dela; `lead_time_dias` é negativo em 20%. Use
+   `lead_time_producao_dias`, e note que a mediana dele é zero dias — o
+   apontamento parece ser feito em lote.
 
 4. **`flag_encerrada = 0` não significa ordem em aberto.** 96,2% dessas ordens
    já produziram. Use `cod_situacao` (1 = ativa, 0 = cancelada) mais apontamento.
@@ -138,7 +154,11 @@ Todas medidas e registradas em `docs/qualidade.md`.
 
 12. **`ponte_nota_saida_item_servico` tem sentinela `id_nota_saida_item = 0`** —
     8.850 linhas, 22% do bruto, que era a origem dos "22% de órfãos" e de todo
-    o excedente sobre o fator 3x. A staging descarta o sentinela.
+    o excedente sobre o fator 3x. A staging descarta o sentinela. Consequência
+    fiscal: **62 dos 84 códigos de serviço da LC 116 (74%) não têm uma única
+    nota vinculada** — ISS por tipo de serviço vai mostrá-los zerados sem que
+    o DW diga se é ausência de movimento ou vínculo perdido na carga.
+    Ver `docs/qualidade.md` seção 9.
 
 ## Métricas de negócio inferidas do dicionário
 
