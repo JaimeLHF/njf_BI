@@ -1,0 +1,95 @@
+version: 2
+
+models:
+  # ---------------------------------------------------------------------------
+  # Os 9 modelos abaixo corrigem a triplicação da carga do DW. O teste
+  # chave_unica é o que impede a regressão: se a origem for recarregada e a
+  # duplicação mudar de forma, o build quebra aqui.
+  # ---------------------------------------------------------------------------
+
+  - name: stg_fat_contrato_loja
+    description: "Contratos de venda das lojas, deduplicados por id_contrato."
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_contrato]
+    columns:
+      - name: id_contrato
+        tests: [not_null]
+
+  - name: stg_fat_contrato_loja_parcela
+    description: "Parcelas dos contratos das lojas, deduplicadas por id_contrato_parcela."
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_contrato_parcela]
+    columns:
+      - name: id_contrato_parcela
+        tests: [not_null]
+      - name: id_contrato
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_fat_contrato_loja')
+                field: id_contrato
+
+  - name: stg_fat_nota_saida_item_pedido
+    description: "Item de NF de saída com o pedido de origem. Grão = item x pedido."
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_nota_saida_item, id_pedido]
+
+  - name: stg_fat_pedido_representante_secundario
+    description: >
+      Rateio de comissão. Grão = pedido x representante: continua 1:N com o
+      pedido depois do dedup, então somar valor por aqui duplica faturamento.
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_pedido, id_representante]
+
+  - name: stg_ponte_pedido_configuracao_ordem
+    description: "Único caminho pedido <-> ordem de fabricação."
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_pedido, id_configuracao, id_ordem_fabricacao]
+
+  - name: stg_ponte_nota_item_pedido_item
+    description: >
+      Ponte item de pedido x item de NF. A chave são as quatro colunas: o mesmo
+      par pode ter mais de um vínculo, com cod_referencia e data_vinculo
+      diferentes.
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_pedido_item, id_nota_saida_item, cod_referencia, data_vinculo]
+
+  - name: stg_ponte_nota_saida_item_servico
+    description: >
+      Ponte item de NF x serviço da LC 116. O sentinela id_nota_saida_item = 0
+      (8.850 linhas, 22% do bruto) é descartado: não existe em
+      fat_nota_saida_item e era a origem dos órfãos.
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_nota_saida_item, id_servico]
+    columns:
+      - name: id_nota_saida_item
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_fat_nota_saida_item')
+                field: id_nota_saida_item
+
+  - name: stg_fat_pontuacao_producao
+    description: >
+      Pontuação de produção por item. SEM chave natural: id_pontuacao é um id de
+      lote, não de linha (40.423 valores para 101.146 linhas). Dedup por linha
+      inteira. Ver o comentário no .sql antes de usar em qualquer agregação.
+
+  - name: stg_fat_nota_saida_item_pontuacao
+    description: >
+      Pontuação por item faturado. SEM chave natural fora das medidas.
+      Dedup por linha inteira. id_ordem_fabricacao guarda num_ordem, não a PK.

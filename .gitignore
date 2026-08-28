@@ -2,7 +2,10 @@
 .env
 .venv/
 __pycache__/
+dbt_packages/
 docs/catalogo.json
 erp_bi.dump
+logs/
 reports/
 restore.log
+target/

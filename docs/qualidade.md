@@ -102,3 +102,33 @@ De 175,056 itens com `quantidade_saldo > 0`, **169,190 (96.6%) ja foram faturado
 | 1 | 563,819 | 561,569 | ativa |
 | 0 | 54,539 | 132 | cancelada/nao executada (praticamente nenhuma produziu) |
 
+
+## 8. Impacto em relatorios existentes e a correcao no dbt
+
+> **Isto afeta relatorios que a empresa ja tenha em producao.** Qualquer consulta que leia essas 9 tabelas direto da origem — Power BI, Excel, extracao propria — esta contando cada linha tres vezes. Nao e um problema desta migracao: a duplicacao vem do Postgres, e a migracao e single-pass. Numeros ja publicados a partir dessas tabelas precisam ser reconferidos.
+
+O que infla, na pratica:
+
+- vinculo pedido ↔ NF (`ponte_nota_item_pedido_item`, `fat_nota_saida_item_pedido`) — conversao de pedido em faturamento e tempo entre venda e faturamento
+- vinculo pedido ↔ ordem (`ponte_pedido_configuracao_ordem`) — qualquer visao que compare vendido com produzido
+- pontuacao de producao (`fat_pontuacao_producao`, `fat_nota_saida_item_pontuacao`) — produtividade da fabrica
+- rateio de comissao (`fat_pedido_representante_secundario`)
+- contratos de loja (`fat_contrato_loja`, `fat_contrato_loja_parcela`)
+- servicos da LC 116 (`ponte_nota_saida_item_servico`) — base de ISS
+
+A correcao esta na camada `staging` do dbt (`models/staging/`), com dedup explicita por chave natural. O `raw` fica intacto de proposito: o defeito da origem precisa continuar visivel e versionado.
+
+**Efeito medido da correcao**
+
+| tabela | raw | staging | removidas | fator |
+|--------|----:|--------:|----------:|------:|
+| `fat_contrato_loja` | 31,875 | 10,625 | 21,250 | 3.000x |
+| `fat_contrato_loja_parcela` | 107,970 | 35,990 | 71,980 | 3.000x |
+| `fat_nota_saida_item_pedido` | 562,914 | 187,615 | 375,299 | 3.000x |
+| `fat_nota_saida_item_pontuacao` | 1,116,354 | 372,118 | 744,236 | 3.000x |
+| `fat_pedido_representante_secundario` | 2,880 | 960 | 1,920 | 3.000x |
+| `fat_pontuacao_producao` | 303,444 | 101,146 | 202,298 | 3.000x |
+| `ponte_nota_item_pedido_item` | 652,017 | 215,658 | 436,359 | 3.023x |
+| `ponte_nota_saida_item_servico` | 40,206 | 10,452 | 29,754 | 3.847x |
+| `ponte_pedido_configuracao_ordem` | 1,024,551 | 341,517 | 683,034 | 3.000x |
+

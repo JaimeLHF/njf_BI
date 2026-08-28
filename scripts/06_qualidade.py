@@ -327,6 +327,59 @@ def secao_semantica(con):
     return out, []
 
 
+def secao_impacto(con):
+    """O que a triplicacao faz com um relatorio que le raw direto, e o que a
+    camada staging do dbt corrige."""
+    tem_staging = n(con, "SELECT count(*) FROM information_schema.schemata "
+                        "WHERE schema_name = 'staging'")
+    out = [
+        "> **Isto afeta relatorios que a empresa ja tenha em producao.** Qualquer "
+        "consulta que leia essas 9 tabelas direto da origem — Power BI, Excel, "
+        "extracao propria — esta contando cada linha tres vezes. Nao e um "
+        "problema desta migracao: a duplicacao vem do Postgres, e a migracao e "
+        "single-pass. Numeros ja publicados a partir dessas tabelas precisam ser "
+        "reconferidos.",
+        "",
+        "O que infla, na pratica:",
+        "",
+        "- vinculo pedido ↔ NF (`ponte_nota_item_pedido_item`, "
+        "`fat_nota_saida_item_pedido`) — conversao de pedido em faturamento e "
+        "tempo entre venda e faturamento",
+        "- vinculo pedido ↔ ordem (`ponte_pedido_configuracao_ordem`) — "
+        "qualquer visao que compare vendido com produzido",
+        "- pontuacao de producao (`fat_pontuacao_producao`, "
+        "`fat_nota_saida_item_pontuacao`) — produtividade da fabrica",
+        "- rateio de comissao (`fat_pedido_representante_secundario`)",
+        "- contratos de loja (`fat_contrato_loja`, `fat_contrato_loja_parcela`)",
+        "- servicos da LC 116 (`ponte_nota_saida_item_servico`) — base de ISS",
+        "",
+        "A correcao esta na camada `staging` do dbt (`models/staging/`), com "
+        "dedup explicita por chave natural. O `raw` fica intacto de proposito: "
+        "o defeito da origem precisa continuar visivel e versionado.",
+        "",
+    ]
+    if not tem_staging:
+        out += ["_Camada staging ainda nao construida: rode `dbt build`._", ""]
+        return out, []
+
+    linhas = [r[0] for r in con.execute(
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'staging' ORDER BY table_name").fetchall()]
+    out += ["**Efeito medido da correcao**", "",
+            "| tabela | raw | staging | removidas | fator |",
+            "|--------|----:|--------:|----------:|------:|"]
+    for stg in linhas:
+        base = stg.removeprefix("stg_")
+        bruto = n(con, f"SELECT count(*) FROM raw.{base}")
+        limpo = n(con, f"SELECT count(*) FROM staging.{stg}")
+        if bruto == limpo:
+            continue
+        out.append(f"| `{base}` | {bruto:,} | {limpo:,} | {bruto - limpo:,} | "
+                   f"{bruto / limpo:.3f}x |")
+    out.append("")
+    return out, []
+
+
 def main():
     con = duckdb.connect(str(DUCK), read_only=True)
     out = [
@@ -346,6 +399,8 @@ def main():
          secao_carga_duplicada(con)),
         ("7. Colunas que nao significam o que o nome sugere",
          secao_semantica(con)),
+        ("8. Impacto em relatorios existentes e a correcao no dbt",
+         secao_impacto(con)),
     ]:
         out += [f"## {titulo}", ""] + linhas + [""]
 

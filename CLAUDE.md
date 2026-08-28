@@ -19,7 +19,9 @@ com `readonly=True`.
 scripts/   _db.py e os 6 scripts numerados do pipeline
 docs/      dicionario.md, modelo.md, qualidade.md, perguntas.md
 reports/   1 HTML de profiling por tabela (gitignored)
-models/    modelos dbt (vazio nesta fase)
+models/staging/  camada dbt que corrige a triplicação da origem
+macros/    generate_schema_name
+tests/generic/   teste chave_unica
 notebooks/ análise exploratória
 dados.duckdb   schema raw com as 34 tabelas migradas (gitignored)
 ```
@@ -34,6 +36,13 @@ dados.duckdb   schema raw com as 34 tabelas migradas (gitignored)
 | `04_migrar_duckdb.py` | Postgres → `raw` no DuckDB | `dados.duckdb` |
 | `05_profiling.py` | perfila as tabelas migradas | `reports/*.html` |
 | `06_qualidade.py` | checks de qualidade | `docs/qualidade.md` |
+
+Depois da migração, construir a camada staging (é ela que corrige a
+triplicação; `06_qualidade.py` mede o efeito):
+
+```bash
+DBT_PROFILES_DIR=. uv run dbt build
+```
 
 Rodar tudo:
 
@@ -85,8 +94,14 @@ Todas medidas e registradas em `docs/qualidade.md`.
    declaram o alvo em texto: `[FK -> dim_empresa.id_empresa]`. Essa é a fonte
    primária; `02_relacionamentos.py` a lê e valida medindo órfãos.
 
-2. **9 tabelas vieram triplicadas** — linha inteira repetida, fator 3,00x. São
-   exatamente as que não têm PK. `SELECT DISTINCT` antes de agregar, sempre.
+2. **9 tabelas vieram triplicadas na origem** — linha inteira repetida, fator
+   3,00x, exatamente as que não têm PK. Assinatura de ETL do DW rodado 3x sem
+   truncate; a migração é single-pass e não pode ter causado.
+   **Corrigido em `models/staging/`**, com dedup explícita por chave natural e
+   teste `chave_unica` que trava a regressão. Leia sempre de `staging`, nunca de
+   `raw`. `raw` fica intacto de propósito, para o defeito continuar visível.
+   Isso afeta relatórios que a empresa já tenha em cima dessas tabelas —
+   ver `docs/qualidade.md` seção 8.
 
 3. **`fat_ordem_fabricacao.data_fim` não é a data real de término.** É anterior
    ao último apontamento em 98,7% das ordens encerradas (mediana -43 dias).
@@ -113,6 +128,17 @@ Todas medidas e registradas em `docs/qualidade.md`.
 
 10. **`dim_tipo_nf_saida` tem 412 tipos e só 158 geram financeiro.** Somar
     faturamento sem filtrar mistura remessa, bonificação e devolução com venda.
+
+11. **`fat_pontuacao_producao.id_pontuacao` não é chave de linha**, apesar do
+    COMMENT. São 40.423 valores para 101.146 linhas distintas; um único id
+    carrega 3.318 linhas, 880 itens e 678 datas — é id de lote. Nunca
+    deduplicar por ele. Não há chave natural fora das medidas, então a staging
+    deduplica por linha inteira. Mesmo caso em
+    `fat_nota_saida_item_pontuacao`.
+
+12. **`ponte_nota_saida_item_servico` tem sentinela `id_nota_saida_item = 0`** —
+    8.850 linhas, 22% do bruto, que era a origem dos "22% de órfãos" e de todo
+    o excedente sobre o fator 3x. A staging descarta o sentinela.
 
 ## Métricas de negócio inferidas do dicionário
 

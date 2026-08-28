@@ -1,0 +1,87 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Cópia fiel das tabelas do schema `bi` do Postgres, carregada por
+      scripts/04_migrar_duckdb.py. Não corrigir nada aqui: o defeito da
+      origem precisa ficar visível. A correção mora em staging.
+    schema: raw
+    tables:
+      - name: dim_calendario
+        description: "Calendario continuo para marcar como tabela de datas no Power BI"
+      - name: dim_centro_custo
+        description: "Centro de custo GLOBAL (211 linhas), derivado da mesma origem: cada código corresponde a exatamente uma descrição. É esta a chave usada por estoque e assistência técnica — não confundir com dim_centro_custo_empresa."
+      - name: dim_centro_trabalho
+        description: "Centros de trabalho da fábrica"
+      - name: dim_cidade
+        description: "Municípios (Brasil e exterior)"
+      - name: dim_cliente
+        description: "Clientes"
+      - name: dim_condicao_pagamento
+        description: "Condições de pagamento"
+      - name: dim_condicao_pagamento_parcela
+        description: "Parcelas que compõem cada condição de pagamento"
+      - name: dim_empresa
+        description: "Empresas / filiais do grupo"
+      - name: dim_estabelecimento
+        description: "Estabelecimentos / endereços de entrega e cobrança vinculados a clientes"
+      - name: dim_item
+        description: "Catálogo global de itens (1 linha por código). Chave usada por compras, estoque e NF de entrada."
+      - name: dim_item_classificacao
+        description: "Classificações do item por visão (comercial, contábil, custos, engenharia, estoque...)"
+      - name: dim_item_empresa
+        description: "Item por empresa. ATENÇÃO: id próprio, diferente de dim_item. Usado por pedido de venda e NF de saída."
+      - name: dim_item_ordem
+        description: "Item na visão de produção. Liga a ordem de fabricação ao catálogo global."
+      - name: dim_operacao
+        description: "Operações do roteiro de produção"
+      - name: dim_representante
+        description: "Representantes comerciais / canais de venda"
+      - name: dim_servico_lei
+        description: "Lista de serviços da LC 116 (ISS)"
+      - name: dim_tipo_nf_saida
+        description: "Tipos de nota fiscal de saída (CFOP e natureza)"
+      - name: dim_unidade_medida
+        description: "Unidades de medida"
+      - name: fat_contrato_loja
+        description: "Contratos de venda das lojas (Focco Lojas)"
+        # ATENÇÃO: 31,875 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: fat_contrato_loja_parcela
+        description: "Parcelas dos contratos das lojas"
+        # ATENÇÃO: 107,970 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: fat_nota_saida
+        description: "Capa da nota fiscal de saída (faturamento)"
+      - name: fat_nota_saida_item
+        description: "Itens da nota fiscal de saída"
+      - name: fat_nota_saida_item_pedido
+        description: "Itens da NF de saída com vínculo ao pedido de origem"
+        # ATENÇÃO: 562,914 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: fat_nota_saida_item_pontuacao
+        description: "Pontuação de produção associada aos itens faturados"
+        # ATENÇÃO: 1,116,354 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: fat_ordem_fabricacao
+        description: "Ordens de fabricação"
+      - name: fat_ordem_movimento
+        description: "Apontamentos de produção nas operações do roteiro"
+      - name: fat_ordem_roteiro
+        description: "Roteiro (operações) das ordens de fabricação"
+      - name: fat_pedido
+        description: "Capa do pedido de venda"
+      - name: fat_pedido_item
+        description: "Itens do pedido de venda"
+      - name: fat_pedido_representante_secundario
+        description: "Rateio de comissão entre representantes secundários DE CADA PEDIDO. Grão = pedido x representante (o mesmo pedido aparece em várias linhas)."
+        # ATENÇÃO: 2,880 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: fat_pontuacao_producao
+        description: "Pontuação de produção por item"
+        # ATENÇÃO: 303,444 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: ponte_nota_item_pedido_item
+        description: "Ponte item da NF de saída x item do pedido"
+        # ATENÇÃO: 652,017 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: ponte_nota_saida_item_servico
+        description: "Ponte item da NF de saída x serviço da LC 116"
+        # ATENÇÃO: 40,206 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
+      - name: ponte_pedido_configuracao_ordem
+        description: "Ponte entre pedido, configuração do produto e ordem de fabricação"
+        # ATENÇÃO: 1,024,551 linhas, triplicadas na origem (ETL do DW rodado 3x sem truncate)
