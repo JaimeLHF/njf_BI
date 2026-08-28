@@ -413,13 +413,15 @@ def secao_perguntas():
         "(1 = ativa, 0 = cancelada), mas isso e leitura nossa. Qual das duas "
         "define \"ordem em aberto\" para a fabrica?",
         "",
-        "5. **O que e `origem_pedido = \'SIM\'`?** Sao 176.559 itens de pedido "
-        "e R$ 2,6 bilhoes que **nunca geraram uma unica nota fiscal em cinco "
-        "anos** — 0,0% de conversao, contra 84,4% da origem PDV. Estao quase "
-        "perfeitamente correlacionados com `situacao_pedido = \'PE\'` e "
-        "`status_liberacao = \'BLQ\'`. Simulacao, orcamento, pedido de outro "
-        "sistema? Somados a carteira, ela salta de R$ 189 milhoes para R$ 2,8 "
-        "bilhoes — quatro vezes o faturamento anual.",
+        "5. **`origem_pedido = \'SIM\'` e simulacao ou pedido travado?** "
+        "Investigamos com o proprio dado (secao 10): sao 116.429 pedidos e "
+        "R$ 2,6 bilhoes que **nunca geraram uma nota fiscal nem uma ordem de "
+        "fabricacao**, e estao **100% em `PE` + `BLQ`**, sem uma unica "
+        "excecao em cinco anos. Trabalhamos com a hipotese de que sao "
+        "simulacao/orcamento e por isso ficam **fora** da carteira de R$ 189 "
+        "milhoes. Duas coisas a confirmar: (a) a hipotese esta certa? (b) se "
+        "estiver, por que continuam entrando 9.697 por ano, R$ 426 milhoes so "
+        "em 2026 — alguem trata isso como funil comercial?",
         "",
         "6. **Como a fabrica aponta producao?** A mediana do tempo entre o "
         "primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo "
@@ -609,9 +611,88 @@ def secao_carteira(con):
     for a, ped, mi in ano:
         rot = a if a is not None else "sem data"
         out.append(f"| {rot} | {ped:,} | R$ {mi} mi |")
+    ordens, ordens_prod, pdv_ordens = con.execute("""
+        WITH ord AS (SELECT DISTINCT id_pedido, id_ordem_fabricacao
+                     FROM staging.stg_ponte_pedido_configuracao_ordem)
+        SELECT count(DISTINCT ord.id_ordem_fabricacao)
+                   FILTER (WHERE p.origem_pedido = 'SIM'),
+               count(DISTINCT ofa.id_ordem_fabricacao)
+                   FILTER (WHERE p.origem_pedido = 'SIM'
+                             AND ofa.quantidade_produzida > 0),
+               count(DISTINCT ord.id_ordem_fabricacao)
+                   FILTER (WHERE p.origem_pedido = 'PDV')
+        FROM staging.stg_fat_pedido p
+        LEFT JOIN ord USING (id_pedido)
+        LEFT JOIN staging.stg_fat_ordem_fabricacao ofa
+               ON ofa.id_ordem_fabricacao = ord.id_ordem_fabricacao
+    """).fetchone()
+    liberado = n(con, "SELECT count(*) FROM staging.stg_fat_pedido "
+                      "WHERE origem_pedido = 'SIM' AND (status_liberacao <> 'BLQ' "
+                      "OR situacao_pedido <> 'PE')")
+    cli_ambos, cli_so_sim, cli_so_pdv = con.execute("""
+        WITH c AS (SELECT DISTINCT p.origem_pedido, e.id_cliente
+                   FROM staging.stg_fat_pedido p
+                   JOIN staging.stg_dim_estabelecimento e USING (id_estabelecimento))
+        SELECT count(*) FILTER (WHERE sim AND pdv),
+               count(*) FILTER (WHERE sim AND NOT pdv),
+               count(*) FILTER (WHERE pdv AND NOT sim)
+        FROM (SELECT id_cliente, bool_or(origem_pedido = 'SIM') sim,
+                     bool_or(origem_pedido = 'PDV') pdv
+              FROM c GROUP BY 1)
+    """).fetchone()
+    combos, com_par = con.execute("""
+        WITH s AS (SELECT DISTINCT id_estabelecimento, round(valor_liquido, 2) v
+                   FROM staging.stg_fat_pedido WHERE origem_pedido = 'SIM'),
+             d AS (SELECT DISTINCT id_estabelecimento, round(valor_liquido, 2) v
+                   FROM staging.stg_fat_pedido WHERE origem_pedido = 'PDV')
+        SELECT (SELECT count(*) FROM s),
+               (SELECT count(*) FROM s JOIN d USING (id_estabelecimento, v))
+    """).fetchone()
+    sim_2026 = con.execute("""
+        SELECT count(*), round(sum(valor_liquido) / 1e6, 1)
+        FROM staging.stg_fat_pedido
+        WHERE origem_pedido = 'SIM' AND year(data_emissao) = 2026
+    """).fetchone()
+
     out += [
         "",
-        "O grosso esta em **2026**. 2027 continua residual. E sobra um resto "
+        "### O que `SIM` e: tres testes feitos com o proprio dado",
+        "",
+        "**1. `SIM` nunca virou compromisso produtivo.** Cruzando com "
+        f"`ponte_pedido_configuracao_ordem`: **{ordens} ordens de fabricacao** "
+        f"para os 116.429 pedidos `SIM`, contra {pdv_ordens:,} ordens para os "
+        f"86.296 pedidos `PDV`. Zero ordens, zero produzidas "
+        f"({ordens_prod}). A fabrica nunca produziu contra um pedido `SIM`. "
+        "**Isso sustenta os R$ 189 milhoes**: se nao gerou ordem nem nota, nao "
+        "e compromisso.",
+        "",
+        "**2. Nao e espelho nem desdobramento.** Os clientes quase nao se "
+        f"sobrepoem no volume: {cli_ambos} clientes aparecem nas duas origens, "
+        f"{cli_so_sim} so em `SIM` e {cli_so_pdv:,} so em `PDV`. E `SIM` esta "
+        "concentrado em **MULTIMARCAS** (128 clientes, 105.419 pedidos — 90% do "
+        f"total), enquanto `PDV` e dominado por FLAGSHIP. Buscando duplicata "
+        f"por estabelecimento + valor, so {com_par:,} de {combos:,} combinacoes "
+        f"({100 * com_par / combos:.0f}%) tem par em `PDV` — acima do acaso, "
+        "mas longe de espelho sistematico. **Os R$ 2,6 bi nao sao duplicata de "
+        "pedido existente.**",
+        "",
+        "**3. `SIM` e um estado, nao uma origem.** Os 116.429 pedidos estao "
+        f"**100% em `situacao_pedido = 'PE'` e `status_liberacao = 'BLQ'`** — "
+        f"{liberado} excecoes. Nenhum foi liberado, nunca, em cinco anos. Ja "
+        "`PDV` tem 75.996 pedidos atendidos e liberados. Mesmas empresas "
+        "emitentes (1, 11, 21), mesmo perfil de produto configurado (88% dos "
+        "itens com mascara em ambas). Nao e outro sistema: e o mesmo fluxo "
+        "parado num estagio anterior.",
+        "",
+        "**Leitura:** `SIM` parece simulacao ou pedido em negociacao que nunca "
+        "foi liberado — coerente com o nome e com produto configurado. Por isso "
+        "fica fora da carteira. O que **nao** fecha: continua entrando volume "
+        f"novo ({sim_2026[0]:,} pedidos e R$ {sim_2026[1]} milhoes so em 2026, "
+        "o maior valor anual da serie). Se e simulacao descartavel, alguem "
+        "ainda esta produzindo muita simulacao; se e funil comercial, tem valor "
+        "de negocio e merece um indicador proprio.",
+        "",
+        "O grosso da carteira esta em **2026**. 2027 continua residual. E sobra um resto "
         "espalhado por 2021-2025: pedidos antigos que nunca foram faturados nem "
         "cancelados — provavelmente abandono, mas isso tambem e pergunta para a "
         "empresa.",

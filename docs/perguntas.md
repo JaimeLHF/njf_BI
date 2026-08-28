@@ -47,9 +47,10 @@ Tabelas: `fat_ordem_fabricacao`, `fat_ordem_roteiro`, `fat_ordem_movimento`,
 milhões**, sendo **R$ 101,3 milhões com entrega prevista em 2026** e apenas
 R$ 4,6 milhões em 2027. Além dos dois problemas do diagnóstico original,
 apareceu um terceiro ao construir o mart: **`origem_pedido = 'SIM'` são R$ 2,6
-bilhões com 0,0% de conversão em nota fiscal**. Sem separar por origem a
-carteira daria R$ 2,8 bi — o dobro de todo o faturamento do período. Ver
-`docs/qualidade.md` seção 10.
+bilhões que nunca geraram nem nota fiscal nem ordem de fabricação**, e estão
+100% em `PE` + `BLQ`. Sem separar por origem a carteira daria R$ 2,8 bi — o
+dobro de todo o faturamento do período. Ver `docs/qualidade.md` seção 10, que
+traz os três testes que sustentam deixar `SIM` de fora.
 
 O diagnóstico original, mantido:
 

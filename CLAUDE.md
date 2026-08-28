@@ -135,10 +135,13 @@ Todas medidas e registradas em `docs/qualidade.md`.
    itens com saldo positivo já foram faturados. A coluna não é baixada.
    Carteira real está em `fct_pedido.valor_em_aberto`.
 
-   **E `origem_pedido` separa pedido de não-pedido.** `SIM` são 176.559 itens
-   e R$ 2,6 bilhões com **0,0% de conversão em NF em cinco anos**, contra 84,4%
-   de `PDV`. Sem filtrar por `origem_converte_em_nf`, a carteira dá R$ 2,8 bi
-   em vez de R$ 189 mi. O que `SIM` significa é pergunta aberta.
+   **E `origem_pedido` separa pedido de não-pedido.** `SIM` são 116.429
+   pedidos e R$ 2,6 bilhões que nunca geraram **nem nota fiscal nem ordem de
+   fabricação**, e estão **100% em `PE` + `BLQ`** — zero exceções em cinco
+   anos, contra 84,4% de conversão de `PDV`. Não é espelho de `PDV` (clientes
+   e canais diferentes: `SIM` é 90% MULTIMARCAS, `PDV` é FLAGSHIP). Leitura de
+   trabalho: simulação ou pedido em negociação nunca liberado. Sem filtrar por
+   `origem_converte_em_nf` a carteira dá R$ 2,8 bi em vez de R$ 189 mi.
 
 6. **`fat_ordem_roteiro.tempo_realizado` está vazio** (2.894 de 3,7M linhas).
    Tempo real vem de `fat_ordem_movimento.tempo_apontado`, preenchido em 91%.

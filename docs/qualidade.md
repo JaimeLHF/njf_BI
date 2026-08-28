@@ -146,7 +146,7 @@ Nenhuma destas se responde com o dado que temos. Levar para a reuniao.
 
 4. **Qual a diferenca entre `flag_encerrada` e `cod_situacao` na ordem de fabricacao?** 96,2% das ordens com `flag_encerrada = 0` ja produziram quantidade e 98,9% tem previsao de fim no passado. A flag parece encerramento administrativo e `cod_situacao` o status real (1 = ativa, 0 = cancelada), mas isso e leitura nossa. Qual das duas define "ordem em aberto" para a fabrica?
 
-5. **O que e `origem_pedido = 'SIM'`?** Sao 176.559 itens de pedido e R$ 2,6 bilhoes que **nunca geraram uma unica nota fiscal em cinco anos** — 0,0% de conversao, contra 84,4% da origem PDV. Estao quase perfeitamente correlacionados com `situacao_pedido = 'PE'` e `status_liberacao = 'BLQ'`. Simulacao, orcamento, pedido de outro sistema? Somados a carteira, ela salta de R$ 189 milhoes para R$ 2,8 bilhoes — quatro vezes o faturamento anual.
+5. **`origem_pedido = 'SIM'` e simulacao ou pedido travado?** Investigamos com o proprio dado (secao 10): sao 116.429 pedidos e R$ 2,6 bilhoes que **nunca geraram uma nota fiscal nem uma ordem de fabricacao**, e estao **100% em `PE` + `BLQ`**, sem uma unica excecao em cinco anos. Trabalhamos com a hipotese de que sao simulacao/orcamento e por isso ficam **fora** da carteira de R$ 189 milhoes. Duas coisas a confirmar: (a) a hipotese esta certa? (b) se estiver, por que continuam entrando 9.697 por ano, R$ 426 milhoes so em 2026 — alguem trata isso como funil comercial?
 
 6. **Como a fabrica aponta producao?** A mediana do tempo entre o primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo cai no mesmo dia. Se o apontamento e feito em lote no fechamento, o tempo de ciclo nao esta no dado. E `data_abertura` vem depois do primeiro apontamento em 24,8% das ordens — o que ela marca de fato?
 
@@ -225,7 +225,17 @@ Sem o filtro de origem a carteira daria R$ 2787.1 milhoes — mais que o dobro d
 | 2026 | 4,520 | R$ 101.3 mi |
 | 2027 | 57 | R$ 4.6 mi |
 
-O grosso esta em **2026**. 2027 continua residual. E sobra um resto espalhado por 2021-2025: pedidos antigos que nunca foram faturados nem cancelados — provavelmente abandono, mas isso tambem e pergunta para a empresa.
+### O que `SIM` e: tres testes feitos com o proprio dado
+
+**1. `SIM` nunca virou compromisso produtivo.** Cruzando com `ponte_pedido_configuracao_ordem`: **0 ordens de fabricacao** para os 116.429 pedidos `SIM`, contra 341,410 ordens para os 86.296 pedidos `PDV`. Zero ordens, zero produzidas (0). A fabrica nunca produziu contra um pedido `SIM`. **Isso sustenta os R$ 189 milhoes**: se nao gerou ordem nem nota, nao e compromisso.
+
+**2. Nao e espelho nem desdobramento.** Os clientes quase nao se sobrepoem no volume: 254 clientes aparecem nas duas origens, 4 so em `SIM` e 5,691 so em `PDV`. E `SIM` esta concentrado em **MULTIMARCAS** (128 clientes, 105.419 pedidos — 90% do total), enquanto `PDV` e dominado por FLAGSHIP. Buscando duplicata por estabelecimento + valor, so 9,022 de 37,048 combinacoes (24%) tem par em `PDV` — acima do acaso, mas longe de espelho sistematico. **Os R$ 2,6 bi nao sao duplicata de pedido existente.**
+
+**3. `SIM` e um estado, nao uma origem.** Os 116.429 pedidos estao **100% em `situacao_pedido = 'PE'` e `status_liberacao = 'BLQ'`** — 0 excecoes. Nenhum foi liberado, nunca, em cinco anos. Ja `PDV` tem 75.996 pedidos atendidos e liberados. Mesmas empresas emitentes (1, 11, 21), mesmo perfil de produto configurado (88% dos itens com mascara em ambas). Nao e outro sistema: e o mesmo fluxo parado num estagio anterior.
+
+**Leitura:** `SIM` parece simulacao ou pedido em negociacao que nunca foi liberado — coerente com o nome e com produto configurado. Por isso fica fora da carteira. O que **nao** fecha: continua entrando volume novo (9,697 pedidos e R$ 426.7 milhoes so em 2026, o maior valor anual da serie). Se e simulacao descartavel, alguem ainda esta produzindo muita simulacao; se e funil comercial, tem valor de negocio e merece um indicador proprio.
+
+O grosso da carteira esta em **2026**. 2027 continua residual. E sobra um resto espalhado por 2021-2025: pedidos antigos que nunca foram faturados nem cancelados — provavelmente abandono, mas isso tambem e pergunta para a empresa.
 
 
 ## Apendice — sentinela da ponte de servicos
