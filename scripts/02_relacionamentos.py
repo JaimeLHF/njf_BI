@@ -4,6 +4,7 @@ candidato medindo orfaos no Postgres e grava docs/relacionamentos.json.
 So metadados e contagens sao impressos.
 """
 import json
+import re
 from pathlib import Path
 
 from _db import SCHEMA, query
@@ -49,6 +50,24 @@ ESCOPO = {
 TABELAS_ESCOPO = [t for v in ESCOPO.values() for t in v]
 
 
+FK_NO_COMENTARIO = re.compile(r"\[FK\s*->\s*([a-z_]+)\.([a-z_]+)\]", re.I)
+
+
+def fks_declaradas():
+    """O banco nao tem FK como constraint, mas os COMMENTs de coluna declaram
+    o alvo em texto: `[FK -> dim_empresa.id_empresa]`. Fonte primaria."""
+    out = {}
+    for nome, t in CAT.items():
+        for c in t["colunas"]:
+            m = FK_NO_COMENTARIO.search(c["descricao"] or "")
+            if m:
+                out[(nome, c["coluna"])] = (m.group(1), m.group(2))
+    return out
+
+
+DECLARADAS = fks_declaradas()
+
+
 def mapa_pk():
     """coluna PK simples -> [tabelas]. Colisoes viram candidatos ambiguos."""
     m = {}
@@ -71,13 +90,27 @@ def candidatos():
             if not alvos or col in pk_propria and len(alvos) == 0:
                 continue
             # prefere dimensao quando ha empate
-            dims = [a for a in alvos if a.startswith("dim_")]
-            escolha = dims[0] if len(dims) == 1 else (alvos[0] if len(alvos) == 1 else None)
+            decl = DECLARADAS.get((nome, col))
+            if decl:
+                escolha = decl[0]
+            else:
+                dims = [a for a in alvos if a.startswith("dim_")]
+                escolha = (dims[0] if len(dims) == 1
+                           else (alvos[0] if len(alvos) == 1 else None))
             out.append({
                 "tabela": nome, "coluna": col,
                 "tabela_ref": escolha, "ambiguo": alvos if escolha is None else None,
                 "candidatos": alvos,
+                "declarada_no_comentario": bool(DECLARADAS.get((nome, col))),
             })
+    # o COMMENT pode declarar FK que a convencao de nome nao pega
+    # (fat_pedido.id_empresa_faturamento -> dim_empresa.id_empresa)
+    cobertos = {(c["tabela"], c["coluna"]) for c in out}
+    for (tab, col), (ref, _) in DECLARADAS.items():
+        if tab in TABELAS_ESCOPO and (tab, col) not in cobertos:
+            out.append({"tabela": tab, "coluna": col, "tabela_ref": ref,
+                        "ambiguo": None, "candidatos": [ref],
+                        "declarada_no_comentario": True})
     return out
 
 
@@ -87,7 +120,8 @@ def validar(c):
     if ref is None or ref in IGNORAR_ALVO:
         return None
     ov = OVERRIDES.get((c["tabela"], c["coluna"]))
-    col_ref = ov[1] if ov else CAT[ref]["pk"][0]
+    decl = DECLARADAS.get((c["tabela"], c["coluna"]))
+    col_ref = ov[1] if ov else (decl[1] if decl else CAT[ref]["pk"][0])
     c["nota"] = ("coluna guarda o valor de "
                  f"{ref}.{col_ref}, nao a PK") if ov else None
     sql = f"""
@@ -121,6 +155,16 @@ def main():
         print(f"{marca}{c['tabela']}.{c['coluna']} -> {c['tabela_ref']}"
               f"  total={v['total']:,} nulos={v['nulos']:,} "
               f"orfaos={v['orfaos']:,} ({v['pct_orfaos']}%)")
+
+    # o que o COMMENT declara e o escopo nao cobriu
+    cobertos = {(c["tabela"], c["coluna"]) for c in cands}
+    fora = sorted(k for k in DECLARADAS if k not in cobertos
+                  and k[0] in TABELAS_ESCOPO)
+    if fora:
+        print(f"\nFKs declaradas em COMMENT dentro do escopo mas nao inferidas "
+              f"por nome ({len(fora)}):")
+        for t, col in fora:
+            print(f"  {t}.{col} -> {'.'.join(DECLARADAS[(t, col)])}")
 
     (ROOT / "docs" / "relacionamentos.json").write_text(
         json.dumps({"escopo": ESCOPO, "relacionamentos": cands},

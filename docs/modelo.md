@@ -1,6 +1,6 @@
 # Modelo — star schema de vendas e producao
 
-> **O banco nao declara nenhuma FOREIGN KEY.** Os relacionamentos abaixo foram inferidos por convencao de nome (`coluna X` = PK simples da tabela cuja PK e `X`) e **validados medindo orfaos no proprio Postgres** (`scripts/02_relacionamentos.py`). A coluna *orfaos* na tabela e a prova.
+> **O banco nao tem nenhuma FOREIGN KEY como constraint** — mas os COMMENTs de coluna declaram o alvo em texto, no formato `[FK -> dim_empresa.id_empresa]`. Essa e a fonte primaria aqui. Onde o comentario nao declara, o alvo foi inferido por convencao de nome (`coluna X` = PK simples da tabela cuja PK e `X`). **Todo relacionamento, declarado ou inferido, foi validado medindo orfaos no proprio Postgres** (`scripts/02_relacionamentos.py`); a coluna *orfaos* nas tabelas e a prova.
 
 Gerado por `scripts/03_modelo.py`.
 
@@ -25,6 +25,7 @@ graph LR
   end
   subgraph Fatos
     fat_contrato_loja["fat_contrato_loja<br/>31,875 linhas"]
+    fat_contrato_loja_parcela["fat_contrato_loja_parcela<br/>107,970 linhas"]
     fat_nota_saida["fat_nota_saida<br/>132,379 linhas"]
     fat_nota_saida_item["fat_nota_saida_item<br/>253,997 linhas"]
     fat_nota_saida_item_pedido["fat_nota_saida_item_pedido<br/>562,914 linhas"]
@@ -47,6 +48,7 @@ graph LR
   dim_empresa -->|id_empresa| fat_contrato_loja
   dim_empresa -->|id_empresa| fat_nota_saida
   dim_empresa -->|id_empresa| fat_pedido
+  dim_empresa -->|id_empresa_faturamento| fat_pedido
   dim_empresa -->|id_empresa| fat_pedido_item
   dim_estabelecimento -->|id_estabelecimento| fat_nota_saida
   dim_estabelecimento -->|id_estabelecimento| fat_pedido
@@ -62,6 +64,7 @@ graph LR
   dim_tipo_nf_saida -->|id_tipo_nf_saida| fat_nota_saida_item
   dim_tipo_nf_saida -->|id_tipo_nf_saida| fat_nota_saida_item_pedido
   dim_tipo_nf_saida -->|id_tipo_nf_saida| fat_pedido
+  fat_contrato_loja -->|id_contrato| fat_contrato_loja_parcela
   fat_nota_saida -->|id_nota_saida| fat_nota_saida_item
   fat_nota_saida -->|id_nota_saida| fat_nota_saida_item_pedido
   fat_nota_saida -->|id_nota_saida| fat_nota_saida_item_pontuacao
@@ -133,6 +136,7 @@ graph LR
   end
   subgraph Fatos
     fat_contrato_loja["fat_contrato_loja<br/>31,875 linhas"]
+    fat_contrato_loja_parcela["fat_contrato_loja_parcela<br/>107,970 linhas"]
     fat_nota_saida["fat_nota_saida<br/>132,379 linhas"]
     fat_nota_saida_item["fat_nota_saida_item<br/>253,997 linhas"]
     fat_nota_saida_item_pedido["fat_nota_saida_item_pedido<br/>562,914 linhas"]
@@ -161,6 +165,7 @@ graph LR
   dim_empresa -->|id_empresa| fat_nota_saida
   dim_empresa -->|id_empresa| fat_ordem_fabricacao
   dim_empresa -->|id_empresa| fat_pedido
+  dim_empresa -->|id_empresa_faturamento| fat_pedido
   dim_empresa -->|id_empresa| fat_pedido_item
   dim_empresa -->|id_empresa| fat_pontuacao_producao
   dim_estabelecimento -->|id_estabelecimento| fat_nota_saida
@@ -180,6 +185,7 @@ graph LR
   dim_tipo_nf_saida -->|id_tipo_nf_saida| fat_nota_saida_item
   dim_tipo_nf_saida -->|id_tipo_nf_saida| fat_nota_saida_item_pedido
   dim_tipo_nf_saida -->|id_tipo_nf_saida| fat_pedido
+  fat_contrato_loja -->|id_contrato| fat_contrato_loja_parcela
   fat_nota_saida -->|id_nota_saida| fat_nota_saida_item
   fat_nota_saida -->|id_nota_saida| fat_nota_saida_item_pedido
   fat_nota_saida -->|id_nota_saida| fat_nota_saida_item_pontuacao
@@ -218,6 +224,7 @@ graph LR
 |----|--------|------|--------|-------:|------:|-------:|
 | `fat_contrato_loja` | `id_cliente` | `dim_cliente` | `id_cliente` | 31,875 | 0 | 0 |
 | `fat_contrato_loja` | `id_empresa` | `dim_empresa` | `id_empresa` | 31,875 | 0 | 0 |
+| `fat_contrato_loja_parcela` | `id_contrato` | `fat_contrato_loja` | `id_contrato` | 107,970 | 0 | 0 |
 | `fat_nota_saida` | `id_cliente` | `dim_cliente` | `id_cliente` | 132,407 | 0 | 0 |
 | `fat_nota_saida` | `id_empresa` | `dim_empresa` | `id_empresa` | 132,407 | 0 | 0 |
 | `fat_nota_saida` | `id_estabelecimento` | `dim_estabelecimento` | `id_estabelecimento` | 132,407 | 0 | 0 |
@@ -236,6 +243,7 @@ graph LR
 | `fat_nota_saida_item_pontuacao` | `id_ordem_fabricacao` | `fat_ordem_fabricacao` | `num_ordem` | 1,116,354 | 0 | 0 |
 | `fat_pedido` | `id_condicao_pagamento` | `dim_condicao_pagamento` | `id_condicao_pagamento` | 202,918 | 4,066 | 0 |
 | `fat_pedido` | `id_empresa` | `dim_empresa` | `id_empresa` | 202,918 | 0 | 0 |
+| `fat_pedido` | `id_empresa_faturamento` | `dim_empresa` | `id_empresa` | 202,918 | 0 | 0 |
 | `fat_pedido` | `id_estabelecimento` | `dim_estabelecimento` | `id_estabelecimento` | 202,918 | 0 | 0 |
 | `fat_pedido` | `id_representante` | `dim_representante` | `id_representante` | 202,918 | 4,044 | 0 |
 | `fat_pedido` | `id_tipo_nf_saida` | `dim_tipo_nf_saida` | `id_tipo_nf_saida` | 202,918 | 4,059 | 0 |

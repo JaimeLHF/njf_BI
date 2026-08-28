@@ -90,10 +90,13 @@ def main():
     out = [
         "# Modelo — star schema de vendas e producao",
         "",
-        "> **O banco nao declara nenhuma FOREIGN KEY.** Os relacionamentos abaixo "
-        "foram inferidos por convencao de nome (`coluna X` = PK simples da tabela "
-        "cuja PK e `X`) e **validados medindo orfaos no proprio Postgres** "
-        "(`scripts/02_relacionamentos.py`). A coluna *orfaos* na tabela e a prova.",
+        "> **O banco nao tem nenhuma FOREIGN KEY como constraint** — mas os "
+        "COMMENTs de coluna declaram o alvo em texto, no formato "
+        "`[FK -> dim_empresa.id_empresa]`. Essa e a fonte primaria aqui. Onde o "
+        "comentario nao declara, o alvo foi inferido por convencao de nome "
+        "(`coluna X` = PK simples da tabela cuja PK e `X`). **Todo relacionamento, "
+        "declarado ou inferido, foi validado medindo orfaos no proprio Postgres** "
+        "(`scripts/02_relacionamentos.py`); a coluna *orfaos* nas tabelas e a prova.",
         "",
         "Gerado por `scripts/03_modelo.py`.",
         "",
