@@ -93,6 +93,21 @@ Detalhe completo com contagens em `docs/modelo.md`.
 - Documentação gerada por script, nunca escrita à mão — reexecutar o script é o
   jeito de atualizar.
 
+## Convenção de severidade nos testes dbt
+
+- **`error`** — só para o que quebra a lógica do modelo: duplicata de chave
+  primária, órfão em join obrigatório, nulo em coluna que entra em cálculo.
+  Nesses casos o número sai errado sem ninguém perceber, então o build tem que
+  parar.
+
+- **`warn`** — defeito conhecido da origem, já documentado em
+  `docs/qualidade.md`, que não temos como corrigir na fonte. Não quebra o
+  build; serve para avisar se a proporção mudar, o que indicaria alteração na
+  carga ou um lote novo do mesmo erro.
+
+Exemplo de `warn`: `tests/proporcao_quantidade_atipica.sql` avisa se os itens
+com quantidade implausível passarem de 0,1% (linha de base: 0,04%).
+
 ## Armadilhas que já custaram tempo
 
 Todas medidas e registradas em `docs/qualidade.md`.
