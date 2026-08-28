@@ -7,6 +7,9 @@ from dados import brl, consulta, filtro_lista, numero, opcoes, pct
 
 st.set_page_config(page_title="Carteira", page_icon="📋", layout="wide")
 st.title("Carteira em aberto")
+st.caption("Posição de **hoje**, não um período: itens de pedido ainda não "
+           "faturados nem cancelados, qualquer que seja a data de emissão. "
+           "É o mesmo número da Home.")
 
 # ---------------------------------------------------------------- filtros
 empresas = opcoes("fct_pedido", "id_empresa")
@@ -72,7 +75,7 @@ kpi = consulta(f"""
 a, b, c, d = st.columns(4)
 a.metric("Carteira em aberto", brl(kpi.carteira))
 b.metric("Pedidos em aberto", numero(kpi.pedidos),
-         f"média {brl(kpi.carteira / kpi.pedidos, 3)}" if kpi.pedidos else None)
+         f"média {brl(kpi.carteira / kpi.pedidos)}" if kpi.pedidos else None)
 c.metric("Carteira vencida", pct(kpi.pct_vencida),
          f"{pct(kpi.pct_velha)} há mais de 1 ano" if kpi.pct_velha else None,
          delta_color="inverse",
@@ -119,12 +122,12 @@ with e:
                     name=rotulo.get(r.faixa, r.faixa),
                     hovertemplate=f"R$ {r.valor:.1f} mi<br>{r.pedidos:,} pedidos"
                                   "<extra></extra>")
-    fig.update_layout(showlegend=False, barmode="stack")
+    fig.update_layout(barmode="stack")
     fig.update_xaxes(title="R$ milhões")
     fig.update_yaxes(title=None, autorange="reversed")
-    st.plotly_chart(
-        tema.aplicar(fig, "Idade da carteira — vencido há +1 ano é outra natureza"),
-        width='stretch')
+    fig = tema.aplicar(fig, "Idade da carteira — vencido há +1 ano é outra natureza")
+    fig.update_layout(showlegend=False, margin_b=8)
+    st.plotly_chart(fig, width='stretch')
 
 with f:
     st.markdown("#### Como ler")

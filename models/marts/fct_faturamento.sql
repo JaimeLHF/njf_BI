@@ -38,6 +38,10 @@ item_empresa as (
 
 catalogo as (
     select * from {{ ref('stg_dim_item') }}
+),
+
+representante as (
+    select * from {{ ref('stg_dim_representante') }}
 )
 
 select
@@ -53,6 +57,7 @@ select
     -- empresa e canal
     nota.id_empresa,
     nota.id_representante,
+    representante.nome_representante,
     nota.id_estabelecimento,
     estabelecimento.id_cidade,
 
@@ -97,3 +102,5 @@ left  join estabelecimento on estabelecimento.id_estabelecimento
                               = nota.id_estabelecimento
 left  join item_empresa    on item_empresa.id_item_empresa = item.id_item_empresa
 left  join catalogo        on catalogo.id_item = item.id_item
+left  join representante   on representante.id_representante
+                              = nota.id_representante

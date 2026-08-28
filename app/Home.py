@@ -1,3 +1,5 @@
+from datetime import date
+
 import streamlit as st
 
 from dados import brl, consulta, pct
@@ -8,6 +10,8 @@ st.set_page_config(page_title="BI — Vendas e Produção", page_icon="📊",
 st.title("BI — Vendas e Produção")
 st.caption("Dados do DW `erp_bi`. Todos os números saem da camada `marts`, "
            "que já corrige os defeitos conhecidos da origem.")
+
+ano = date.today().year
 
 resumo = consulta("""
     SELECT
@@ -23,12 +27,17 @@ resumo = consulta("""
 """).iloc[0]
 
 a, b, c = st.columns(3)
-a.metric("Faturamento no ano", brl(resumo.fat_ano * 1e6),
-         help="Ano corrente, só NF que gera financeiro, sem devolução.")
-b.metric("Ordens no prazo", pct(resumo.no_prazo),
-         help="Ordens ativas, medidas pela conclusão real do apontamento.")
-c.metric("Carteira em aberto", brl(resumo.carteira * 1e6),
-         help="Só origens que faturam e quantidade plausível.")
+a.metric(f"Faturamento em {ano}", brl(resumo.fat_ano * 1e6),
+         help="Só NF que gera financeiro, sem devolução. A página de "
+              "Faturamento abre com os últimos 24 meses, por isso mostra um "
+              "número maior.")
+b.metric("Ordens no prazo — série completa", pct(resumo.no_prazo),
+         help="Todas as ordens ativas desde 2020, medidas pela conclusão real "
+              "do apontamento. A página de Produção abre com os últimos 24 "
+              "meses e mostra um número um pouco diferente.")
+c.metric("Carteira em aberto — hoje", brl(resumo.carteira * 1e6),
+         help="Só origens que faturam e quantidade plausível. Não depende de "
+              "período: é a posição atual.")
 
 st.divider()
 
@@ -54,11 +63,18 @@ vezes.
 aqui usa a conclusão real derivada do apontamento, e o número cai de 73,7%
 para 32,9%.
 
-**Carteira não se mede por `quantidade_saldo` nem sem separar `origem_pedido`.**
-A coluna de saldo não é baixada no faturamento, e a origem `SIM` são R$ 2,6
-bilhões que nunca geraram nota nem ordem de fabricação. Com os dois cuidados,
-a carteira é R$ 189 milhões em vez de R$ 2,8 bilhões.
+**Carteira não se mede por `quantidade_saldo`, nem sem separar a origem do
+pedido.** A coluna de saldo não é baixada no faturamento, e a origem `SIM` são
+R$ 2,6 bilhões que nunca geraram nota nem ordem de fabricação. Com os dois
+cuidados, a carteira é R$ 189 milhões em vez de R$ 2,8 bilhões.
 """)
+
+st.caption(
+    "Os três números acima usam recortes diferentes — ano corrente, série "
+    "completa e posição de hoje. Cada página abre no seu próprio período, "
+    "então os valores não batem com estes por construção. O período está no "
+    "rótulo de cada indicador."
+)
 
 st.info("Cada página traz, no rodapé, o que os filtros padrão removeram. "
         "Desligar um filtro é legítimo — desligar sem saber o que ele fazia, não.",

@@ -48,10 +48,23 @@ def filtro_lista(coluna: str, selecionados: list, todos: list) -> str:
 
 
 def brl(v, casas=1) -> str:
-    """R$ em milhões, com vírgula decimal."""
+    """R$ na unidade que a magnitude pede. Um ticket médio de R$ 17 mil não
+    pode sair como 'R$ 0,017 mi' num painel que alguém lê em pé numa reunião."""
     if v is None or pd.isna(v):
         return "—"
-    return f"R$ {v / 1e6:,.{casas}f} mi".replace(",", "_").replace(".", ",").replace("_", ".")
+    sinal = "-" if v < 0 else ""
+    v = abs(v)
+    if v >= 1e9:
+        corpo, unidade = v / 1e9, " bi"
+    elif v >= 1e6:
+        corpo, unidade = v / 1e6, " mi"
+    elif v >= 1e3:
+        corpo, unidade = v / 1e3, " mil"
+    else:
+        # abaixo de mil já são reais e centavos, não faz sentido 1 casa
+        corpo, unidade, casas = v, "", 2
+    texto = f"{corpo:,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{sinal}R$ {texto}{unidade}"
 
 
 def numero(v) -> str:
@@ -69,4 +82,5 @@ def pct(v, casas=1) -> str:
 def delta_pct(atual, anterior) -> str | None:
     if not anterior or pd.isna(anterior) or pd.isna(atual):
         return None
-    return f"{(atual / anterior - 1) * 100:+.1f}% vs período anterior"
+    v = (atual / anterior - 1) * 100
+    return f"{v:+.1f}% vs período anterior".replace(".", ",")

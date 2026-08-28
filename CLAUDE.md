@@ -62,10 +62,22 @@ for p in ['Home.py','pages/1_Faturamento.py','pages/2_Producao.py','pages/3_Cart
     print(p, at.exception or 'OK')"
 ```
 
-Convenção do app: o filtro que evita o número errado vem **ligado por padrão**
-e cada página diz no rodapé o que ele removeu. `app/dados.py` centraliza acesso
-e formatação (`brl`, `pct`, `numero`); `app/tema.py`, a paleta. Nenhuma página
-lê de `raw` nem de `staging`.
+Convenções do app:
+
+- O filtro que evita o número errado vem **ligado por padrão** e cada página diz
+  no rodapé o que ele removeu.
+- `brl()` escolhe a unidade pela magnitude (mil / mi / bi). Um ticket de
+  R$ 17 mil não pode sair como "R$ 0,017 mi" num painel lido em pé.
+- Cada KPI carrega o período no rótulo. A Home usa recortes diferentes das
+  páginas de propósito (ano corrente, série completa, posição de hoje), e sem
+  o rótulo isso vira pergunta na reunião.
+- Título no topo, legenda embaixo (`tema.aplicar` decide sozinho se há legenda).
+- **Nada de gráfico com código no eixo.** `cod_familia` (2.584 valores) e
+  `cod_linha_producao` (272) não têm descrição em lugar nenhum do DW — não
+  viram gráfico. Onde faltava rótulo legível, o corte foi trocado por um que
+  comunica: representante, faixa de tamanho da ordem, faixa de operações.
+- `app/dados.py` centraliza acesso e formatação; `app/tema.py`, a paleta.
+  Nenhuma página lê de `raw` nem de `staging`.
 
 **Marts.** `marts.fct_faturamento` (grão: item de NF de saída, filtro de
 natureza da operação exposto em `gera_financeiro`) e `marts.fct_ordem_producao`

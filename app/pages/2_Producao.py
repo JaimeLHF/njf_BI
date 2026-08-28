@@ -7,6 +7,7 @@ from dados import consulta, filtro_lista, numero, opcoes, pct, periodo
 
 st.set_page_config(page_title="Produção", page_icon="🏭", layout="wide")
 st.title("Aderência a prazo de produção")
+titulo_periodo = st.empty()
 
 st.warning(
     "**Esta página não mostra tempo de ciclo.** O apontamento parece ser feito "
@@ -86,6 +87,10 @@ if kpi.pct_real and kpi.pct_antigo:
         f"`data_fim` — **{kpi.pct_antigo - kpi.pct_real:.0f} pontos** de "
         "diferença. O segundo compara o plano com o próprio plano.", icon="📌")
 
+titulo_periodo.caption(
+    f"Ordens concluídas entre **{de:%b/%Y} e {ate:%b/%Y}**. A Home mostra a "
+    "série completa desde 2020, por isso o número lá é um pouco diferente.")
+
 st.divider()
 
 # ---------------------------------------------------------------- gráficos
@@ -124,43 +129,72 @@ with f:
     st.plotly_chart(tema.aplicar(fig, "Distribuição do atraso (±120 dias)"),
                     width='stretch')
 
+# Os dois gráficos abaixo substituíram "Por linha de produção" (cod_linha_producao
+# tem 272 valores sem descrição em lugar nenhum: casa com apenas 4 dos 137
+# centros de trabalho) e a dispersão de quantidade x atraso, cuja correlação
+# linear é 0,049 — ela respondia "não" a uma pergunta que, em faixas, tem
+# resposta "sim".
 g, h = st.columns(2)
 with g:
-    linha = consulta(f"""
-        SELECT CAST(cod_linha_producao AS VARCHAR) AS linha, count(*) AS ordens,
+    tamanho = consulta(f"""
+        SELECT CASE WHEN quantidade_prevista <= 1  THEN '1 unidade'
+                    WHEN quantidade_prevista <= 5  THEN '2 a 5'
+                    WHEN quantidade_prevista <= 20 THEN '6 a 20'
+                    WHEN quantidade_prevista <= 100 THEN '21 a 100'
+                    ELSE 'mais de 100' END AS faixa,
+               min(quantidade_prevista) AS ord,
+               count(*) AS ordens,
                100.0 * count(*) FILTER (WHERE no_prazo)
                      / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0) AS pct
-        FROM marts.fct_ordem_producao WHERE {w} AND cod_linha_producao IS NOT NULL
-        GROUP BY 1 HAVING count(*) >= 50 ORDER BY ordens DESC LIMIT 15
+        FROM marts.fct_ordem_producao WHERE {w} AND quantidade_prevista IS NOT NULL
+        GROUP BY 1 ORDER BY 2
     """, par)
-    fig = px.bar(linha.sort_values("pct"), x="pct", y="linha", orientation="h",
-                 hover_data=["ordens"])
-    fig.update_traces(marker_color=tema.AZUL)
-    fig.update_yaxes(title=None, type="category")
-    fig.update_xaxes(title="% no prazo", range=[0, 100])
+    fig = px.bar(tamanho, x="faixa", y="pct", custom_data=["ordens"])
+    fig.update_traces(
+        marker_color=tema.AZUL,
+        hovertemplate="%{x}<br>%{y:.1f}% no prazo<br>%{customdata[0]:,} ordens"
+                      "<extra></extra>")
+    fig.update_xaxes(title="quantidade prevista na ordem")
+    fig.update_yaxes(title="% no prazo", range=[0, 100])
     st.plotly_chart(
-        tema.aplicar(fig, "Por linha de produção (15 maiores, mín. 50 ordens)"),
+        tema.aplicar(fig, "Ordem acima de 5 unidades atrasa mais — e satura aí"),
         width='stretch')
+    st.caption(
+        "A queda é de **40% para 22%** entre ordens de até 5 unidades e ordens "
+        "de 6 a 20. Acima disso o indicador não piora mais: o problema não é o "
+        "tamanho em si, é passar do lote pequeno.")
 
 with h:
-    disp = consulta(f"""
-        SELECT quantidade_prevista, atraso_dias, qtd_operacoes
-        FROM marts.fct_ordem_producao
-        WHERE {w} AND atraso_dias BETWEEN -200 AND 200
-          AND quantidade_prevista BETWEEN 1 AND 500
-        USING SAMPLE 8000 ROWS
+    operacoes = consulta(f"""
+        SELECT CASE WHEN qtd_operacoes <= 2  THEN '1 a 2'
+                    WHEN qtd_operacoes <= 5  THEN '3 a 5'
+                    WHEN qtd_operacoes <= 10 THEN '6 a 10'
+                    ELSE '11 ou mais' END AS faixa,
+               min(qtd_operacoes) AS ord,
+               count(*) AS ordens,
+               100.0 * count(*) FILTER (WHERE no_prazo)
+                     / nullif(count(*) FILTER (WHERE no_prazo IS NOT NULL), 0) AS pct
+        FROM marts.fct_ordem_producao WHERE {w} AND qtd_operacoes IS NOT NULL
+        GROUP BY 1 ORDER BY 2
     """, par)
-    fig = px.scatter(disp, x="quantidade_prevista", y="atraso_dias",
-                     opacity=0.25, color_discrete_sequence=[tema.AZUL])
-    fig.add_hline(y=0, line_color=tema.VERMELHO, line_width=2)
-    fig.update_xaxes(title="quantidade prevista")
-    fig.update_yaxes(title="dias de atraso")
+    fig = px.bar(operacoes, x="faixa", y="pct", custom_data=["ordens"])
+    fig.update_traces(
+        marker_color=tema.AMBAR,
+        hovertemplate="%{x}<br>%{y:.1f}% no prazo<br>%{customdata[0]:,} ordens"
+                      "<extra></extra>")
+    fig.update_xaxes(title="operações no roteiro")
+    fig.update_yaxes(title="% no prazo", range=[0, 100])
     st.plotly_chart(
-        tema.aplicar(fig, "Ordem maior atrasa mais? (amostra de 8 mil)"),
+        tema.aplicar(fig, "Roteiro longo atrasa muito mais que ordem grande"),
         width='stretch')
+    st.caption(
+        "De **56% para 21%** entre roteiros de 1-2 e de 6-10 operações. "
+        "A complexidade do roteiro explica o atraso melhor que a quantidade — "
+        "é por aqui que vale procurar o gargalo.")
 
 st.caption(
     "Ordens sem apontamento não têm conclusão real e ficam fora do cálculo de "
     "prazo. `quantidade_refugada` não aparece em lugar nenhum desta página: é "
     "maior que a produzida em 54.439 de 54.494 ordens e a semântica não foi "
-    "confirmada com o ERP.")
+    "confirmada com o ERP. Também não há corte por linha de produção: os 272 "
+    "códigos não têm descrição no DW.")
