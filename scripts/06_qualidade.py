@@ -653,10 +653,11 @@ def secao_carteira(con):
                (SELECT count(*) FROM s JOIN d USING (id_estabelecimento, v))
     """).fetchone()
     serie_limpa = con.execute("""
-        SELECT year(data_emissao), count(*), round(sum(valor_liquido) / 1e6, 1)
-        FROM staging.stg_fat_pedido
-        WHERE origem_pedido = 'SIM' AND valor_liquido <= 1e6
-          AND year(data_emissao) >= 2021
+        SELECT year(data_emissao), count(DISTINCT id_pedido),
+               round(sum(valor_item_liquido) / 1e6, 1)
+        FROM marts.fct_pedido
+        WHERE valor_pedido_plausivel AND
+              origem_pedido = 'SIM' AND year(data_emissao) >= 2021
         GROUP BY 1 ORDER BY 1
     """).fetchall()
     sim_2026 = con.execute("""
@@ -702,9 +703,9 @@ def secao_carteira(con):
         "",
         "**O volume nao esta crescendo.** O agregado bruto de 2026 "
         f"(R$ {sim_2026[1]} milhoes) engana: sao 60 pedidos com valor irreal "
-        "(secao 11). Tirando os pedidos acima de R$ 1 milhao, a serie e plana:",
+        "(secao 11). Filtrando por `valor_pedido_plausivel`, a serie e plana:",
         "",
-        "| ano | pedidos | valor (sem outliers) |",
+        "| ano | pedidos | valor plausivel |",
         "|---|---:|---:|",
     ] + [
         f"| {a} | {ped:,} | R$ {mi} mi |" for a, ped, mi in serie_limpa
@@ -724,73 +725,133 @@ def secao_carteira(con):
 
 
 def secao_outliers(con):
-    """Pedidos com valor irreal, achados ao investigar a serie do SIM."""
-    linhas = con.execute("""
-        SELECT origem_pedido, count(*),
-               round(median(valor_liquido), 0),
-               round(quantile_cont(valor_liquido, 0.99), 0),
-               round(max(valor_liquido) / 1e6, 2),
-               count(*) FILTER (WHERE valor_liquido > 1e6),
-               count(*) FILTER (WHERE valor_liquido > 1e7)
-        FROM staging.stg_fat_pedido GROUP BY 1 ORDER BY 2 DESC
+    """Pedidos com quantidade irreal, e como o mart os marca sem limiar em R$."""
+    dig, atip, impl, mi = con.execute("""
+        SELECT count(*) FILTER (WHERE flag_quantidade_igual_valor_unitario),
+               count(*) FILTER (WHERE flag_quantidade_atipica),
+               count(*) FILTER (WHERE NOT valor_pedido_plausivel),
+               round(sum(valor_item_liquido)
+                     FILTER (WHERE NOT valor_pedido_plausivel) / 1e6, 1)
+        FROM marts.fct_pedido
+    """).fetchone()
+    por_origem = con.execute("""
+        SELECT origem_pedido,
+               count(*) FILTER (WHERE NOT valor_pedido_plausivel),
+               round(coalesce(sum(valor_item_liquido)
+                     FILTER (WHERE NOT valor_pedido_plausivel), 0) / 1e6, 1)
+        FROM marts.fct_pedido GROUP BY 1 ORDER BY 2 DESC
     """).fetchall()
-    dig = con.execute("""
-        SELECT count(*), round(sum(valor_item_liquido) / 1e6, 1)
+    redondas = con.execute("""
+        SELECT quantidade, count(*),
+               count(*) FILTER (WHERE origem_pedido = 'SIM'),
+               count(*) FILTER (WHERE origem_pedido = 'PDV'),
+               round(sum(valor_item_liquido) / 1e6, 2)
         FROM marts.fct_pedido
-        WHERE quantidade = valor_unitario_liquido AND quantidade > 100
-    """).fetchone()
-    qtd = con.execute("""
-        SELECT round(quantile_cont(quantidade, 0.99), 0), round(max(quantidade), 0),
-               count(*) FILTER (WHERE quantidade IN (10000, 40000, 100000))
-        FROM marts.fct_pedido
-    """).fetchone()
-    cart, cart_sem, ped_out = con.execute("""
-        SELECT round(sum(valor_em_aberto) / 1e6, 1),
-               round(sum(valor_em_aberto) FILTER (WHERE valor_item_liquido <= 1e6)
-                     / 1e6, 1),
-               count(DISTINCT id_pedido) FILTER (WHERE valor_item_liquido > 1e6)
+        WHERE quantidade IN (1000, 5000, 10000, 20000, 40000)
+        GROUP BY 1 ORDER BY 1
+    """).fetchall()
+    faixas = con.execute("""
+        SELECT CASE WHEN quantidade < 10 THEN 'menos de 10'
+                    WHEN quantidade < 100 THEN '10 a 99'
+                    ELSE '100 ou mais' END,
+               count(*), round(sum(valor_item_liquido) / 1e6, 2),
+               min(quantidade)
+        FROM marts.fct_pedido WHERE quantidade = valor_unitario_liquido
+        GROUP BY 1 ORDER BY 4
+    """).fetchall()
+    cart, cart_pl = con.execute("""
+        SELECT round(sum(valor_em_aberto) / 1e6, 2),
+               round(sum(valor_em_aberto)
+                     FILTER (WHERE valor_pedido_plausivel) / 1e6, 2)
         FROM marts.fct_pedido
         WHERE origem_converte_em_nf AND situacao_pedido <> 'C'
     """).fetchone()
 
     out = [
-        "Apareceu ao investigar por que o valor de `SIM` saltou em 2026. Nao "
-        "era o canal: era um punhado de pedidos com valor impossivel.",
+        "Apareceu ao investigar por que o valor de `SIM` saltou em 2026. Nao era "
+        "o canal: era um punhado de pedidos com quantidade impossivel.",
         "",
-        "| origem | pedidos | mediana | p99 | maior | > R$ 1 mi | > R$ 10 mi |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "### Quantidade redonda nao e o sinal",
+        "",
+        "A primeira hipotese era que quantidades redondas (10.000, 40.000) "
+        "marcassem registro de teste. **Elas aparecem nas duas origens**, mas "
+        "significam coisas diferentes:",
+        "",
+        "| quantidade | itens | em `SIM` | em `PDV` | valor |",
+        "|---:|---:|---:|---:|---:|",
     ]
-    for orig, ped, p50, p99, mx, a1, a10 in linhas:
-        out.append(f"| `{orig}` | {ped:,} | R$ {p50:,.0f} | R$ {p99:,.0f} | "
-                   f"R$ {mx} mi | {a1} | {a10} |")
+    for q, tot, sim, pdv, v in redondas:
+        out.append(f"| {q:,.0f} | {tot} | {sim} | {pdv} | R$ {v} mi |")
     out += [
         "",
-        f"`PDV` nao tem **nenhum** pedido acima de R$ 10 milhoes; `SIM` tem 30. "
-        "Numa industria que fatura ~R$ 300 milhoes por ano, um pedido unico de "
-        f"R$ {linhas[0][4]} milhoes nao existe.",
+        "5.000 unidades aparecem 19 vezes, todas em `PDV`, e somam R$ 0,07 "
+        "milhao: e item barato comprado em volume, perfeitamente legitimo. Ja "
+        "40.000 unidades somam R$ 514 milhoes. **A redondeza nao distingue nada "
+        "— o que distingue e a magnitude relativa ao proprio produto.** Por isso "
+        "o mart nao usa lista de numeros redondos nem corte em reais.",
         "",
-        "### A assinatura do erro",
+        "### As duas assinaturas usadas",
         "",
-        f"Em {dig[0]} itens (R$ {dig[1]} milhoes) a **quantidade e igual ao "
-        "valor unitario** — o mesmo numero digitado nos dois campos. O maior "
-        "pedido da base e exatamente isso: um item, quantidade 11.747, valor "
-        "unitario R$ 11.747,00, total R$ 138 milhoes.",
+        "**1. `flag_quantidade_igual_valor_unitario`** — o mesmo numero digitado "
+        "nos dois campos. Sozinha ela e ruidosa, e o piso de 100 unidades e o "
+        "que a torna util:",
         "",
-        f"O resto sao quantidades redondas de teste: {qtd[2]} itens com "
-        "quantidade exata de 10.000, 40.000 ou 100.000, contra um p99 de "
-        f"{qtd[0]:.0f} unidades. O maximo e {qtd[1]:,.0f} unidades num unico "
-        "item.",
+        "| quantidade | itens | valor |",
+        "|---|---:|---:|",
+    ]
+    for f, tot, v, _ in faixas:
+        out.append(f"| {f} | {tot} | R$ {v} mi |")
+    out += [
+        "",
+        "Comprar 1 unidade de um item de R$ 1,00 e trivialmente comum e nao e "
+        "erro. Acima de 100 a coincidencia deixa de ser plausivel — e o maior "
+        "pedido da base esta ai: quantidade 11.747, valor unitario "
+        "R$ 11.747,00, total R$ 138 milhoes.",
+        "",
+        "**2. `flag_quantidade_atipica`** — quantidade acima de **10x o p99 do "
+        "proprio item**, com o mesmo piso de 100. O p99 cai para a familia e "
+        "depois para o global quando o item nao tem 30 ocorrencias.",
+        "",
+        "O detalhe que quase passou: **o percentil precisa ser calculado sobre "
+        "base limpa** (`quantidade <= 500`, o p99,9 global). Na primeira versao "
+        "a referencia se contaminava com o proprio defeito — um item com seis "
+        "pedidos falsos de 40.000 unidades tinha p99 = 40.000 e passava ileso. "
+        "Com a base limpa o p99 desse item cai para 7 e ele e marcado.",
+        "",
+        "Sobre o N: 10 marca 150 itens, 20 marca 111 e 50 apenas 81, deixando "
+        "passar erro evidente; 5 comeca a pegar produto de cauda curta.",
+        "",
+        "### Resultado",
+        "",
+        f"| flag | itens |",
+        "|---|---:|",
+        f"| `flag_quantidade_igual_valor_unitario` | {dig} |",
+        f"| `flag_quantidade_atipica` | {atip} |",
+        f"| **`valor_pedido_plausivel` = falso** | **{impl}** |",
+        "",
+        f"{impl} itens em 379.754 (**0,04%**), R$ {mi} milhoes de valor irreal.",
+        "",
+        "| origem | itens implausiveis | valor |",
+        "|---|---:|---:|",
+    ]
+    for orig, nn, v in por_origem:
+        out.append(f"| `{orig}` | {nn} | R$ {v} mi |")
+    out += [
+        "",
+        "**O erro existe nas duas origens.** `SIM` concentra o valor (63 itens, "
+        "R$ 1.625 milhoes), mas `PDV` tem 92 itens marcados — mais casos, com "
+        "valor pequeno. Isso o torna **achado proprio**, um problema de entrada "
+        "de dados no pedido, e nao apenas mais um indicio de ambiente de "
+        "simulacao.",
         "",
         "### Impacto",
         "",
-        f"**A carteira nao e afetada.** Sao {ped_out} pedidos outlier nas "
-        f"origens que faturam: R$ {cart} milhoes com eles, R$ {cart_sem} "
-        "milhoes sem. O problema esta concentrado em `SIM`, que ja fica fora "
-        "da carteira por outro motivo.",
+        f"**A carteira nao e afetada:** R$ {cart} milhoes com os outliers, "
+        f"R$ {cart_pl} milhoes sem.",
         "",
-        "O que **e** afetado: qualquer media, ticket medio ou serie temporal "
-        "de valor de pedido que inclua `SIM` sem filtro de outlier. Foi "
-        "exatamente o que fez o funil de 2026 parecer tres vezes maior do que e.",
+        "O que **e** afetado: qualquer media, ticket medio ou serie temporal de "
+        "valor de pedido. Foi exatamente o que fez o funil de 2026 parecer tres "
+        "vezes maior do que e.",
         "",
     ]
     return out, []

@@ -237,16 +237,16 @@ Sem o filtro de origem a carteira daria R$ 2787.1 milhoes — mais que o dobro d
 
 **Leitura:** `SIM` e **intencao de compra do canal de revenda, pendente de liberacao** — 90% MULTIMARCAS, 100% bloqueado, nunca produzido. `PDV` e dominado por FLAGSHIP, loja propria, que libera direto. Por isso `SIM` fica fora da carteira.
 
-**O volume nao esta crescendo.** O agregado bruto de 2026 (R$ 426.7 milhoes) engana: sao 60 pedidos com valor irreal (secao 11). Tirando os pedidos acima de R$ 1 milhao, a serie e plana:
+**O volume nao esta crescendo.** O agregado bruto de 2026 (R$ 426.7 milhoes) engana: sao 60 pedidos com valor irreal (secao 11). Filtrando por `valor_pedido_plausivel`, a serie e plana:
 
-| ano | pedidos | valor (sem outliers) |
+| ano | pedidos | valor plausivel |
 |---|---:|---:|
-| 2021 | 39,599 | R$ 274.1 mi |
-| 2022 | 16,517 | R$ 119.6 mi |
-| 2023 | 16,305 | R$ 102.0 mi |
-| 2024 | 17,092 | R$ 119.3 mi |
-| 2025 | 17,128 | R$ 172.6 mi |
-| 2026 | 9,677 | R$ 92.2 mi |
+| 2021 | 39,599 | R$ 279.4 mi |
+| 2022 | 16,506 | R$ 123.8 mi |
+| 2023 | 15,994 | R$ 117.4 mi |
+| 2024 | 16,536 | R$ 131.8 mi |
+| 2025 | 16,936 | R$ 204.2 mi |
+| 2026 | 9,582 | R$ 114.5 mi |
 
 O numero de pedidos por ano esta estavel desde 2022 (16-17 mil) e 2026 projeta na mesma faixa. **Nao e funil em crescimento nem acumulo de registros: e um canal de tamanho constante que nunca foi medido.**
 
@@ -255,28 +255,64 @@ O grosso da carteira esta em **2026**. 2027 continua residual. E sobra um resto 
 
 ## 11. Pedidos com valor irreal
 
-Apareceu ao investigar por que o valor de `SIM` saltou em 2026. Nao era o canal: era um punhado de pedidos com valor impossivel.
+Apareceu ao investigar por que o valor de `SIM` saltou em 2026. Nao era o canal: era um punhado de pedidos com quantidade impossivel.
 
-| origem | pedidos | mediana | p99 | maior | > R$ 1 mi | > R$ 10 mi |
-|---|---:|---:|---:|---:|---:|---:|
-| `SIM` | 116,429 | R$ 3,170 | R$ 78,296 | R$ 137.99 mi | 60 | 30 |
-| `PDV` | 86,296 | R$ 5,106 | R$ 202,454 | R$ 2.88 mi | 13 | 0 |
-| `EXP` | 185 | R$ 3,184 | R$ 120,138 | R$ 0.17 mi | 0 | 0 |
-| `ORC` | 8 | R$ 10,000 | R$ 132,365 | R$ 0.13 mi | 0 | 0 |
+### Quantidade redonda nao e o sinal
 
-`PDV` nao tem **nenhum** pedido acima de R$ 10 milhoes; `SIM` tem 30. Numa industria que fatura ~R$ 300 milhoes por ano, um pedido unico de R$ 137.99 milhoes nao existe.
+A primeira hipotese era que quantidades redondas (10.000, 40.000) marcassem registro de teste. **Elas aparecem nas duas origens**, mas significam coisas diferentes:
 
-### A assinatura do erro
+| quantidade | itens | em `SIM` | em `PDV` | valor |
+|---:|---:|---:|---:|---:|
+| 1,000 | 79 | 25 | 54 | R$ 72.46 mi |
+| 5,000 | 19 | 0 | 19 | R$ 0.07 mi |
+| 10,000 | 16 | 13 | 3 | R$ 531.24 mi |
+| 20,000 | 4 | 3 | 1 | R$ 118.51 mi |
+| 40,000 | 8 | 8 | 0 | R$ 513.86 mi |
 
-Em 6 itens (R$ 158.6 milhoes) a **quantidade e igual ao valor unitario** — o mesmo numero digitado nos dois campos. O maior pedido da base e exatamente isso: um item, quantidade 11.747, valor unitario R$ 11.747,00, total R$ 138 milhoes.
+5.000 unidades aparecem 19 vezes, todas em `PDV`, e somam R$ 0,07 milhao: e item barato comprado em volume, perfeitamente legitimo. Ja 40.000 unidades somam R$ 514 milhoes. **A redondeza nao distingue nada — o que distingue e a magnitude relativa ao proprio produto.** Por isso o mart nao usa lista de numeros redondos nem corte em reais.
 
-O resto sao quantidades redondas de teste: 24 itens com quantidade exata de 10.000, 40.000 ou 100.000, contra um p99 de 36 unidades. O maximo e 432,432 unidades num unico item.
+### As duas assinaturas usadas
+
+**1. `flag_quantidade_igual_valor_unitario`** — o mesmo numero digitado nos dois campos. Sozinha ela e ruidosa, e o piso de 100 unidades e o que a torna util:
+
+| quantidade | itens | valor |
+|---|---:|---:|
+| menos de 10 | 617 | R$ 0.0 mi |
+| 10 a 99 | 64 | R$ 0.04 mi |
+| 100 ou mais | 7 | R$ 158.63 mi |
+
+Comprar 1 unidade de um item de R$ 1,00 e trivialmente comum e nao e erro. Acima de 100 a coincidencia deixa de ser plausivel — e o maior pedido da base esta ai: quantidade 11.747, valor unitario R$ 11.747,00, total R$ 138 milhoes.
+
+**2. `flag_quantidade_atipica`** — quantidade acima de **10x o p99 do proprio item**, com o mesmo piso de 100. O p99 cai para a familia e depois para o global quando o item nao tem 30 ocorrencias.
+
+O detalhe que quase passou: **o percentil precisa ser calculado sobre base limpa** (`quantidade <= 500`, o p99,9 global). Na primeira versao a referencia se contaminava com o proprio defeito — um item com seis pedidos falsos de 40.000 unidades tinha p99 = 40.000 e passava ileso. Com a base limpa o p99 desse item cai para 7 e ele e marcado.
+
+Sobre o N: 10 marca 150 itens, 20 marca 111 e 50 apenas 81, deixando passar erro evidente; 5 comeca a pegar produto de cauda curta.
+
+### Resultado
+
+| flag | itens |
+|---|---:|
+| `flag_quantidade_igual_valor_unitario` | 7 |
+| `flag_quantidade_atipica` | 150 |
+| **`valor_pedido_plausivel` = falso** | **155** |
+
+155 itens em 379.754 (**0,04%**), R$ 1626.3 milhoes de valor irreal.
+
+| origem | itens implausiveis | valor |
+|---|---:|---:|
+| `PDV` | 92 | R$ 1.0 mi |
+| `SIM` | 63 | R$ 1625.3 mi |
+| `EXP` | 0 | R$ 0.0 mi |
+| `ORC` | 0 | R$ 0.0 mi |
+
+**O erro existe nas duas origens.** `SIM` concentra o valor (63 itens, R$ 1.625 milhoes), mas `PDV` tem 92 itens marcados — mais casos, com valor pequeno. Isso o torna **achado proprio**, um problema de entrada de dados no pedido, e nao apenas mais um indicio de ambiente de simulacao.
 
 ### Impacto
 
-**A carteira nao e afetada.** Sao 2 pedidos outlier nas origens que faturam: R$ 189.0 milhoes com eles, R$ 186.4 milhoes sem. O problema esta concentrado em `SIM`, que ja fica fora da carteira por outro motivo.
+**A carteira nao e afetada:** R$ 188.96 milhoes com os outliers, R$ 188.7 milhoes sem.
 
-O que **e** afetado: qualquer media, ticket medio ou serie temporal de valor de pedido que inclua `SIM` sem filtro de outlier. Foi exatamente o que fez o funil de 2026 parecer tres vezes maior do que e.
+O que **e** afetado: qualquer media, ticket medio ou serie temporal de valor de pedido. Foi exatamente o que fez o funil de 2026 parecer tres vezes maior do que e.
 
 
 ## Apendice — sentinela da ponte de servicos

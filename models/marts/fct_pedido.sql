@@ -176,51 +176,149 @@ base as (
     left  join cliente         on cliente.id_cliente = estabelecimento.id_cliente
     left  join item_empresa    on item_empresa.id_item_empresa
                                   = item.id_item_empresa
+),
+
+-- Plausibilidade da quantidade, sem limiar em reais.
+--
+-- Um corte do tipo "acima de R$ 1 milhão" é arbitrário e envelhece com a
+-- inflação e com o crescimento da empresa. O que não envelhece é a assinatura
+-- do erro e a magnitude relativa ao próprio produto.
+--
+-- Referência: p99 da quantidade do próprio item, com fallback para a família e
+-- depois para o global. Exige 30 ocorrências para o percentil significar algo.
+--
+-- O percentil é calculado sobre uma BASE LIMPA (quantidade <= 500, o p99,9
+-- global). Sem isso a referência se contamina com o próprio defeito: um item
+-- com seis pedidos falsos de 40.000 unidades tinha p99 = 40.000 e passava
+-- ileso. Com a base limpa o p99 desse item cai para 7 e ele é marcado.
+base_limpa as (
+    select * from base where quantidade <= 500
+),
+
+referencia_item as (
+    select
+        id_item_empresa,
+        quantile_cont(quantidade, 0.99) as p99_quantidade
+    from base_limpa
+    group by 1
+    having count(*) >= 30
+),
+
+referencia_familia as (
+    select
+        cod_familia,
+        quantile_cont(quantidade, 0.99) as p99_quantidade
+    from base_limpa
+    group by 1
+    having count(*) >= 30
+),
+
+referencia_global as (
+    select quantile_cont(quantidade, 0.99) as p99_quantidade from base_limpa
+),
+
+com_referencia as (
+    select
+        base.*,
+        coalesce(
+            referencia_item.p99_quantidade,
+            referencia_familia.p99_quantidade,
+            referencia_global.p99_quantidade
+        ) as p99_quantidade_referencia,
+        case
+            when referencia_item.p99_quantidade is not null then 'item'
+            when referencia_familia.p99_quantidade is not null then 'familia'
+            else 'global'
+        end as base_referencia_quantidade
+    from base
+    left join referencia_item    using (id_item_empresa)
+    left join referencia_familia using (cod_familia)
+    cross join referencia_global
 )
 
 select
-    base.*,
+    com_referencia.* exclude (p99_quantidade_referencia),
+    com_referencia.p99_quantidade_referencia,
+
+    -- Assinatura de digitação duplicada: o mesmo número nos dois campos.
+    -- O piso de 100 não é arbitrário, é o que separa erro de coincidência:
+    -- dos 688 itens onde quantidade = valor unitário, 617 têm quantidade < 10
+    -- (comprar 1 unidade de um item de R$ 1,00 é trivialmente comum) e somam
+    -- R$ 0,00 mi. Acima de 100 sobram 7 itens, R$ 158,6 mi — e o maior pedido
+    -- da base é um deles: quantidade 11.747 x R$ 11.747,00.
+    com_referencia.quantidade = com_referencia.valor_unitario_liquido
+        and com_referencia.quantidade >= 100
+        as flag_quantidade_igual_valor_unitario,
+
+    -- Quantidade uma ordem de grandeza acima da cauda conhecida do produto.
+    --
+    -- N = 10: o p99 já absorve a variação legítima (pedido grande,
+    -- sazonalidade), então exigir 10x acima dele é pedir algo que a história do
+    -- próprio item não explica. N = 20 marcaria 111 e N = 50 apenas 81,
+    -- deixando passar erro evidente; N = 5 começa a pegar produto de cauda
+    -- curta. Com N = 10 e o piso de 100, são 150 itens em 379.754 (0,04%).
+    --
+    -- O piso de 100 evita o falso positivo do item de cauda curta: com p99 = 2,
+    -- 10x daria 20, e um pedido de 30 unidades não é erro.
+    coalesce(
+        com_referencia.quantidade
+            > 10 * com_referencia.p99_quantidade_referencia
+        and com_referencia.quantidade >= 100,
+        false
+    ) as flag_quantidade_atipica,
+
+    -- filtro pronto, para quem não quer compor as duas
+    not (
+        (com_referencia.quantidade = com_referencia.valor_unitario_liquido
+         and com_referencia.quantidade >= 100)
+        or coalesce(
+            com_referencia.quantidade
+                > 10 * com_referencia.p99_quantidade_referencia
+            and com_referencia.quantidade >= 100,
+            false
+        )
+    ) as valor_pedido_plausivel,
 
     -- carteira: nunca negativa. Onde o faturado passa do pedido menos o
     -- cancelado, a sobra é zero e o excedente fica visível em
     -- quantidade_faturada_acima_do_pedido.
     greatest(
-        base.quantidade - coalesce(base.quantidade_cancelada, 0)
-            - base.quantidade_faturada,
+        com_referencia.quantidade - coalesce(com_referencia.quantidade_cancelada, 0)
+            - com_referencia.quantidade_faturada,
         0
     ) as quantidade_em_aberto,
 
     greatest(
-        base.quantidade - coalesce(base.quantidade_cancelada, 0)
-            - base.quantidade_faturada,
+        com_referencia.quantidade - coalesce(com_referencia.quantidade_cancelada, 0)
+            - com_referencia.quantidade_faturada,
         0
-    ) * base.valor_unitario_liquido as valor_em_aberto,
+    ) * com_referencia.valor_unitario_liquido as valor_em_aberto,
 
     greatest(
-        base.quantidade_faturada
-            - (base.quantidade - coalesce(base.quantidade_cancelada, 0)),
+        com_referencia.quantidade_faturada
+            - (com_referencia.quantidade - coalesce(com_referencia.quantidade_cancelada, 0)),
         0
     ) as quantidade_faturada_acima_do_pedido,
 
     -- status do item
     case
-        when base.situacao_pedido = 'C' then 'cancelado'
-        when base.quantidade_faturada = 0 then 'nao faturado'
-        when base.quantidade_faturada
-             >= base.quantidade - coalesce(base.quantidade_cancelada, 0)
+        when com_referencia.situacao_pedido = 'C' then 'cancelado'
+        when com_referencia.quantidade_faturada = 0 then 'nao faturado'
+        when com_referencia.quantidade_faturada
+             >= com_referencia.quantidade - coalesce(com_referencia.quantidade_cancelada, 0)
             then 'faturado total'
         else 'faturado parcial'
     end as status_faturamento,
 
     -- tempo entre a venda e a primeira nota
-    date_diff('day', base.data_emissao, base.data_primeiro_faturamento)
+    date_diff('day', com_referencia.data_emissao, com_referencia.data_primeiro_faturamento)
         as dias_ate_primeiro_faturamento,
 
     -- atraso contra a entrega prometida ao cliente
     date_diff(
-        'day', base.data_entrega_prevista, base.data_primeiro_faturamento
+        'day', com_referencia.data_entrega_prevista, com_referencia.data_primeiro_faturamento
     ) as dias_vs_entrega_prevista,
 
-    base.data_primeiro_faturamento is not null as tem_faturamento
+    com_referencia.data_primeiro_faturamento is not null as tem_faturamento
 
-from base
+from com_referencia

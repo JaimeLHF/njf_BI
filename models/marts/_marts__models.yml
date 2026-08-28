@@ -138,3 +138,23 @@ models:
         description: >
           Excedente onde o faturado passa do pedido menos o cancelado.
           1.190 itens de 379.754.
+      - name: flag_quantidade_igual_valor_unitario
+        description: >
+          Quantidade idêntica ao valor unitário, com quantidade >= 100.
+          Assinatura de digitação duplicada. O piso de 100 separa erro de
+          coincidência: dos 688 itens onde os dois campos batem, 617 têm
+          quantidade < 10 e somam R$ 0,00 mi.
+      - name: flag_quantidade_atipica
+        description: >
+          Quantidade acima de 10x o p99 do próprio item, com piso de 100
+          unidades. Fallback do p99: item -> família -> global. O percentil é
+          calculado sobre base limpa (quantidade <= 500) para a referência não
+          se contaminar com o próprio defeito.
+      - name: valor_pedido_plausivel
+        description: >
+          Negação das duas flags acima, para quem quer o filtro pronto.
+          155 itens em 379.754 (0,04%) são implausíveis, R$ 1.626 milhões.
+      - name: p99_quantidade_referencia
+        description: "O p99 usado na comparação, já visível para auditoria."
+      - name: base_referencia_quantidade
+        description: "item / familia / global — de onde veio o p99."
