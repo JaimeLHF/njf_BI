@@ -52,9 +52,19 @@ uv run python 08_auditar_publicacao.py  # portão: reprova se achar algo identif
 uv run python 09_comparar_publicacao.py # 17 KPIs têm de bater com o banco completo
 ```
 
-Depois aponte o Streamlit Cloud para `app/Home.py` e defina a variável de
-ambiente `MODO_PUBLICACAO=1`. As dependências saem de `requirements.txt`, com
-versões fixas — o Cloud não usa `uv`.
+Depois aponte o Streamlit Cloud para `app/Home.py`, branch `master`. As
+dependências saem de `requirements.txt`, com versões fixas — o Cloud não usa
+`uv`.
+
+Não é preciso configurar nada além disso: o app detecta o modo pelo arquivo que
+existe em disco, e no Cloud só existe `dados_pub.duckdb`, porque
+`dados.duckdb` está no `.gitignore`.
+
+> Se quiser forçar explicitamente, `MODO_PUBLICACAO=1` funciona como variável de
+> ambiente **e** como secret. Vale saber que **o Streamlit Cloud não exporta
+> secrets como variáveis de ambiente** — `os.environ` não os enxerga. Por isso
+> `app/dados.py` lê `st.secrets` também, e por isso a detecção por arquivo
+> existe: um deploy não deve quebrar por causa de um campo esquecido.
 
 ### O que a versão publicada não tem
 
