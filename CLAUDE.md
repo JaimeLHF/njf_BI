@@ -21,6 +21,7 @@ docs/      dicionario.md, modelo.md, qualidade.md, perguntas.md
 reports/   1 HTML de profiling por tabela (gitignored)
 models/staging/  camada dbt que corrige a triplicação da origem
 models/marts/    fct_faturamento, fct_ordem_producao, fct_pedido
+app/       Streamlit: Home + 3 páginas, lendo só de `marts`
 macros/    generate_schema_name
 tests/generic/   teste chave_unica
 notebooks/ análise exploratória
@@ -44,6 +45,27 @@ triplicação; `06_qualidade.py` mede o efeito):
 ```bash
 DBT_PROFILES_DIR=. uv run dbt build
 ```
+
+**App.** Streamlit, três páginas (faturamento, produção, carteira):
+
+```bash
+uv run streamlit run app/Home.py
+```
+
+Testar sem navegador, o que roda cada página de verdade e captura exceções:
+
+```bash
+cd app && uv run python -c "
+from streamlit.testing.v1 import AppTest
+for p in ['Home.py','pages/1_Faturamento.py','pages/2_Producao.py','pages/3_Carteira.py']:
+    at = AppTest.from_file(p, default_timeout=180).run()
+    print(p, at.exception or 'OK')"
+```
+
+Convenção do app: o filtro que evita o número errado vem **ligado por padrão**
+e cada página diz no rodapé o que ele removeu. `app/dados.py` centraliza acesso
+e formatação (`brl`, `pct`, `numero`); `app/tema.py`, a paleta. Nenhuma página
+lê de `raw` nem de `staging`.
 
 **Marts.** `marts.fct_faturamento` (grão: item de NF de saída, filtro de
 natureza da operação exposto em `gera_financeiro`) e `marts.fct_ordem_producao`
@@ -187,6 +209,9 @@ Todas medidas e registradas em `docs/qualidade.md`.
 
 10. **`dim_tipo_nf_saida` tem 412 tipos e só 158 geram financeiro.** Somar
     faturamento sem filtrar mistura remessa, bonificação e devolução com venda.
+    As 957 notas de devolução (R$ 7,6 mi) são **todas** de tipos que não geram
+    financeiro — filtrar por `gera_financeiro` já as exclui, então medir
+    devolução exige tirar esse filtro, senão o indicador zera a si mesmo.
 
 11. **`fat_pontuacao_producao.id_pontuacao` não é chave de linha**, apesar do
     COMMENT. São 40.423 valores para 101.146 linhas distintas; um único id

@@ -427,7 +427,19 @@ def secao_perguntas():
         "milhoes do agregado bruto. A diferenca sao 60 pedidos com valor "
         "irreal, que a secao 11 detalha.",
         "",
-        "6. **Como a fabrica aponta producao?** A mediana do tempo entre o "
+        "6. **Existe processo de cancelamento de pedido nao atendido?** Sem "
+        "ele, **~R$ 83 milhoes da carteira sao registros fantasma de "
+        "2021-2025** — pedidos com entrega prevista vencida ha mais de um ano, "
+        "nunca faturados e nunca cancelados. Se nao ha rotina de baixa, a "
+        "carteira precisa de um corte por idade para significar alguma coisa.",
+        "",
+        "7. **Existe um agrupamento comercial acima de `cod_familia`?** Sao "
+        "2.584 familias, e as 20 maiores respondem por apenas 28% do "
+        "faturamento — nao da para navegar numa reuniao nem resumir em top-N. "
+        "`dim_item_classificacao` tem 6.5 mil valores por tipo, pior ainda. "
+        "Existe linha, colecao ou grupo com algumas dezenas de valores?",
+        "",
+        "8. **Como a fabrica aponta producao?** A mediana do tempo entre o "
         "primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo "
         "cai no mesmo dia. Se o apontamento e feito em lote no fechamento, o "
         "tempo de ciclo nao esta no dado. E `data_abertura` vem depois do "
