@@ -83,3 +83,58 @@ models:
           lead_time_dias não significa nada.
       - name: tem_apontamento
         description: "Se falso, todas as colunas de prazo real são nulas."
+
+  - name: fct_pedido
+    description: >
+      Pedidos de venda no grão de item, com carteira em aberto derivada do
+      faturamento real via ponte deduplicada — não de quantidade_saldo, que a
+      origem nunca baixa. NÃO filtra origem_pedido: 'SIM' são R$ 2,6 bi com 0%
+      de conversão em NF e inflam a carteira em 15x se somados junto. Use
+      origem_converte_em_nf.
+    tests:
+      - chave_unica:
+          arguments:
+            colunas: [id_pedido_item]
+    columns:
+      - name: id_pedido_item
+        description: "Chave. Um item de pedido de venda."
+        tests: [not_null]
+      - name: id_pedido
+        tests: [not_null]
+      - name: id_cliente
+        description: >
+          Vem por dim_estabelecimento: fat_pedido não tem cliente direto.
+      - name: quantidade_em_aberto
+        description: >
+          quantidade - cancelado - faturado, nunca negativa. Só conta como
+          faturamento nota que gera financeiro e não é devolução.
+      - name: valor_em_aberto
+        description: "quantidade_em_aberto x valor_unitario_liquido."
+      - name: status_faturamento
+        description: >
+          cancelado / nao faturado / faturado parcial / faturado total.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['cancelado', 'nao faturado', 'faturado parcial',
+                         'faturado total']
+      - name: origem_converte_em_nf
+        description: >
+          Taxa de conversão da origem em nota fiscal acima de 1%, medida do
+          próprio dado. Falso para SIM, EXP e ORC — nenhuma delas gerou uma
+          única NF em cinco anos. Filtro obrigatório para carteira.
+      - name: taxa_conversao_da_origem
+        description: "Proporção de itens da origem que viraram NF. PDV: 84,4%."
+      - name: dias_ate_primeiro_faturamento
+        description: >
+          data_primeiro_faturamento menos data_emissao do pedido. Mediana de
+          64 dias.
+      - name: quantidade_saldo_origem_nao_confiavel
+        description: >
+          A coluna quantidade_saldo da origem, renomeada. Não é baixada no
+          faturamento: 96,6% dos itens com saldo positivo já foram faturados.
+          Está aqui só para comparação.
+      - name: quantidade_faturada_acima_do_pedido
+        description: >
+          Excedente onde o faturado passa do pedido menos o cancelado.
+          1.190 itens de 379.754.

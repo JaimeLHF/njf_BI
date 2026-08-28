@@ -20,7 +20,7 @@ scripts/   _db.py e os 6 scripts numerados do pipeline
 docs/      dicionario.md, modelo.md, qualidade.md, perguntas.md
 reports/   1 HTML de profiling por tabela (gitignored)
 models/staging/  camada dbt que corrige a triplicação da origem
-models/marts/    fct_faturamento e fct_ordem_producao
+models/marts/    fct_faturamento, fct_ordem_producao, fct_pedido
 macros/    generate_schema_name
 tests/generic/   teste chave_unica
 notebooks/ análise exploratória
@@ -47,7 +47,9 @@ DBT_PROFILES_DIR=. uv run dbt build
 
 **Marts.** `marts.fct_faturamento` (grão: item de NF de saída, filtro de
 natureza da operação exposto em `gera_financeiro`) e `marts.fct_ordem_producao`
-(grão: ordem, com `data_conclusao_real` derivada do apontamento).
+(grão: ordem, com `data_conclusao_real` derivada do apontamento) e
+`marts.fct_pedido` (grão: item de pedido, com carteira em aberto derivada do
+faturamento real).
 
 Rodar tudo:
 
@@ -118,16 +120,25 @@ Todas medidas e registradas em `docs/qualidade.md`.
    já materializada em `fct_ordem_producao.data_conclusao_real`. O indicador
    muda **41 pontos**: 32,9% no prazo contra 73,7% pelo cálculo ingênuo.
 
-   **`data_abertura` também não é o começo.** Em 24,8% das ordens o primeiro
-   apontamento vem antes dela; `lead_time_dias` é negativo em 20%. Use
-   `lead_time_producao_dias`, e note que a mediana dele é zero dias — o
-   apontamento parece ser feito em lote.
+   **A aderência a prazo continua válida mesmo com apontamento em lote** — o
+   último apontamento é conclusão real de qualquer jeito. O que fica
+   comprometido é só o tempo de ciclo: `data_abertura` vem depois do primeiro
+   apontamento em 24,8% das ordens, `lead_time_dias` é negativo em 20%, e a
+   mediana de `lead_time_producao_dias` é zero dias. **Não publicar tempo de
+   ciclo** até a produção confirmar o hábito de apontamento; a aderência pode
+   ir para a apresentação.
 
 4. **`flag_encerrada = 0` não significa ordem em aberto.** 96,2% dessas ordens
    já produziram. Use `cod_situacao` (1 = ativa, 0 = cancelada) mais apontamento.
 
 5. **`fat_pedido_item.quantidade_saldo` não é saldo em aberto** — 96,6% dos
    itens com saldo positivo já foram faturados. A coluna não é baixada.
+   Carteira real está em `fct_pedido.valor_em_aberto`.
+
+   **E `origem_pedido` separa pedido de não-pedido.** `SIM` são 176.559 itens
+   e R$ 2,6 bilhões com **0,0% de conversão em NF em cinco anos**, contra 84,4%
+   de `PDV`. Sem filtrar por `origem_converte_em_nf`, a carteira dá R$ 2,8 bi
+   em vez de R$ 189 mi. O que `SIM` significa é pergunta aberta.
 
 6. **`fat_ordem_roteiro.tempo_realizado` está vazio** (2.894 de 3,7M linhas).
    Tempo real vem de `fat_ordem_movimento.tempo_apontado`, preenchido em 91%.
@@ -154,11 +165,10 @@ Todas medidas e registradas em `docs/qualidade.md`.
 
 12. **`ponte_nota_saida_item_servico` tem sentinela `id_nota_saida_item = 0`** —
     8.850 linhas, 22% do bruto, que era a origem dos "22% de órfãos" e de todo
-    o excedente sobre o fator 3x. A staging descarta o sentinela. Consequência
-    fiscal: **62 dos 84 códigos de serviço da LC 116 (74%) não têm uma única
-    nota vinculada** — ISS por tipo de serviço vai mostrá-los zerados sem que
-    o DW diga se é ausência de movimento ou vínculo perdido na carga.
-    Ver `docs/qualidade.md` seção 9.
+    o excedente sobre o fator 3x. A staging descarta o sentinela. Os 62 códigos
+    da LC 116 que só aparecem nele **não são anomalia**: o catálogo fiscal vem
+    pré-populado com a lista inteira da lei. Ver o apêndice de
+    `docs/qualidade.md`.
 
 ## Métricas de negócio inferidas do dicionário
 

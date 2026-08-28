@@ -146,53 +146,95 @@ Nenhuma destas se responde com o dado que temos. Levar para a reuniao.
 
 4. **Qual a diferenca entre `flag_encerrada` e `cod_situacao` na ordem de fabricacao?** 96,2% das ordens com `flag_encerrada = 0` ja produziram quantidade e 98,9% tem previsao de fim no passado. A flag parece encerramento administrativo e `cod_situacao` o status real (1 = ativa, 0 = cancelada), mas isso e leitura nossa. Qual das duas define "ordem em aberto" para a fabrica?
 
-5. **Por que 62 codigos de servico da LC 116 nao tem nenhuma nota vinculada?** Ver a secao 9. Se a base de ISS desses servicos e apurada em outro lugar, precisamos saber onde.
+5. **O que e `origem_pedido = 'SIM'`?** Sao 176.559 itens de pedido e R$ 2,6 bilhoes que **nunca geraram uma unica nota fiscal em cinco anos** — 0,0% de conversao, contra 84,4% da origem PDV. Estao quase perfeitamente correlacionados com `situacao_pedido = 'PE'` e `status_liberacao = 'BLQ'`. Simulacao, orcamento, pedido de outro sistema? Somados a carteira, ela salta de R$ 189 milhoes para R$ 2,8 bilhoes — quatro vezes o faturamento anual.
 
 6. **Como a fabrica aponta producao?** A mediana do tempo entre o primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo cai no mesmo dia. Se o apontamento e feito em lote no fechamento, o tempo de ciclo nao esta no dado. E `data_abertura` vem depois do primeiro apontamento em 24,8% das ordens — o que ela marca de fato?
 
 
-## 9. Vinculos fiscais de servico sem base
+## 9. Efeito da correcao de prazo nos marts
 
-As 8,850 linhas do sentinela `id_nota_saida_item = 0` foram verificadas: **o servico esta preenchido em todas**. `id_servico` nulo: 0. Servico inexistente em `dim_servico_lei`: 0. Sao 82 servicos da LC 116 distintos, todos validos, apontando para um item de nota fiscal que nao existe.
+Duas coisas diferentes saem do apontamento, e elas **nao tem o mesmo grau de confianca**. A aderencia a prazo esta solida; o tempo de ciclo nao. Nao descartar as duas juntas.
 
-A ponte tem so duas colunas e nao carrega valor, entao **nao ha receita de servico perdida em reais** — o valor mora em `fat_nota_saida_item.valor_liquido`, e sem item nao ha o que somar. O problema e de cobertura fiscal:
+### Aderencia a prazo — solida
 
-| | servicos LC 116 |
-|---|---:|
-| so aparecem no sentinela (nenhuma nota vinculada) | **62** |
-| aparecem no sentinela e em notas reais | 20 |
-| nunca aparecem no sentinela | 2 |
-| **total na ponte** | **84** |
-
-Em volume de vinculo o sentinela e pequeno: 82 pares distintos contra 10,452 uteis (0.8%). As 8,850 linhas sao esses 82 pares repetidos, nao 8,850 vinculos.
-
-Em cobertura de catalogo o buraco e grande: **62 dos 84 codigos de servico (74%) nao tem uma unica nota atribuida**. Qualquer visao de ISS por tipo de servico vai mostrar esses codigos zerados, e nao da para saber pelo DW se e porque nao houve movimento ou porque o vinculo se perdeu na carga.
-
-A base recuperavel sao os 10,452 itens de NF vinculados, R$ 59.45 milhoes de valor liquido.
-
-
-## 10. Efeito da correcao de prazo nos marts
-
-A ordem em que o prazo e medido muda o indicador em **41 pontos percentuais**. Sobre as ordens ativas (`cod_situacao = 1`):
+Usa `data_prevista_fim` contra `data_conclusao_real`, que e o **ultimo** apontamento da ordem. O ultimo apontamento e conclusao real independente de como a fabrica aponta: mesmo que tudo seja lancado de uma vez no fechamento, a ordem nao esta concluida antes dele. O indicador vale.
 
 | | com data_fim (ingenuo) | com o apontamento (real) |
 |---|---:|---:|
 | ordens no prazo | **73.7%** | **32.9%** |
 | mediana do atraso | -13 dias (adiantado) | +11 dias |
 
-Base: 563,819 ordens ativas, 550,985 com apontamento (97.7%). Lead time mediano da abertura a conclusao real: **19 dias**.
+Base: 563,819 ordens ativas (`cod_situacao = 1`), 550,985 com apontamento (97.7%).
 
-O numero ingenuo diz que tres em cada quatro ordens fecham no prazo, e com folga. O numero real diz que uma em cada tres fecha no prazo, com mediana de 11 dias de atraso. **Se algum indicador de produção hoje mostra algo perto de 74%, ele esta medindo o plano contra o plano.**
+A ordem em que o prazo e medido muda o indicador em **41 pontos percentuais**. O numero ingenuo diz que tres em cada quatro ordens fecham no prazo, e com folga. O real diz que uma em cada tres fecha no prazo, com mediana de 11 dias de atraso. **Se algum indicador de producao hoje mostra algo perto de 74%, ele esta medindo o plano contra o plano.**
 
-### `data_abertura` nao e o comeco do processo
+### Lead time / tempo de ciclo — comprometido
 
-Em 110,312 das 550,985 ordens com apontamento (**20.0%**) o `lead_time_dias` da negativo: a producao terminou antes da ordem ser aberta. Olhando o inicio em vez do fim, 136,849 ordens (**24.8%**) tem o primeiro apontamento anterior a abertura — e `data_inicio` ja era anterior a `data_abertura` em 41% das ordens (secao 3).
+Aqui sim ha problema, e ele **nao afeta a aderencia acima**.
 
-A leitura: **`data_abertura` e um registro administrativo posterior**, nao a criacao da ordem. Por isso o mart traz `lead_time_producao_dias` (do primeiro ao ultimo apontamento, nunca negativo) ao lado de `lead_time_dias`, mais a flag `apontamento_antes_da_abertura`.
+O tempo do primeiro ao ultimo apontamento (`lead_time_producao_dias`) tem mediana de 0 dias: quase toda ordem concentra o apontamento num unico dia. Isso mede a janela de apontamento, nao o tempo de fabricacao. Se a fabrica aponta em lote no fechamento, o tempo de ciclo simplesmente nao esta no dado.
 
-Ressalva sobre o proprio `lead_time_producao_dias`: a mediana e 0 dias — a maior parte das ordens concentra todo o apontamento num unico dia. Ele mede a janela de apontamento, que pode nao ser o tempo real de fabricacao se a fabrica aponta em lote no fechamento. **Confirmar com a producao como e o habito de apontamento** antes de publicar tempo de ciclo.
+E o lead time contado da abertura (`lead_time_dias`) e negativo em 110,312 das 550,985 ordens com apontamento (**20.0%**): a producao terminou antes da ordem ser aberta. Em 136,849 ordens (**24.8%**) o primeiro apontamento vem antes da abertura, e `data_inicio` ja era anterior a `data_abertura` em 41% das ordens (secao 3). **`data_abertura` e um registro administrativo posterior**, nao a criacao da ordem.
+
+Por isso o mart traz as duas medidas lado a lado, mais a flag `apontamento_antes_da_abertura`. **Nao publicar tempo de ciclo** ate a producao confirmar o habito de apontamento (pergunta 5 da secao 8).
 
 ### Ordens com abertura no futuro
 
 7,476 ordens tem `data_abertura` entre hoje e o fim de 2026: isso e programacao normal, nao defeito. Ja as 28 ordens abertas em 2027 (com apenas 9 apontamentos) sao o que faz o recorte "carteira 2027" parecer existir. Trate 2027 como residual ate a empresa confirmar.
+
+
+## 10. Carteira em aberto: o filtro que faltava
+
+Tres coisas precisam estar certas para a carteira fechar. Duas ja estavam em `docs/qualidade.md`; a terceira so apareceu ao construir `fct_pedido`.
+
+1. `quantidade_saldo` nao serve (secao 7) — a origem nao a baixa.
+2. A ponte pedido ↔ NF esta triplicada (secao 6) — deduplicar antes.
+3. **`origem_pedido` separa pedido de nao-pedido** — o achado novo.
+
+### Conversao em nota fiscal por origem
+
+| origem | conversao em NF | itens | valor do pedido | em aberto |
+|---|---:|---:|---:|---:|
+| `PDV` | **84.4%** | 202,298 | R$ 1499.1 mi | R$ 189.0 mi |
+| `SIM` | **0.0%** | 176,559 | R$ 2596.4 mi | R$ 2596.4 mi |
+| `EXP` | **0.0%** | 860 | R$ 1.9 mi | R$ 1.8 mi |
+| `ORC` | **0.0%** | 37 | R$ 0.3 mi | R$ 0.2 mi |
+
+**`SIM` nunca gerou uma nota fiscal.** Nao e baixa conversao: e zero, em cinco anos e 176 mil itens. A origem esta quase perfeitamente correlacionada com `situacao_pedido = 'PE'` (pendente) e `status_liberacao = 'BLQ'` (bloqueado). `EXP` e `ORC` idem, mas sao residuais.
+
+### O tamanho do erro
+
+| criterio | carteira |
+|---|---:|
+| pela `quantidade_saldo` da origem | R$ 1149.4 mi |
+| sem separar origem | R$ 2787.1 mi |
+| **so origens que faturam** | **R$ 189.0 mi** |
+
+Sem o filtro de origem a carteira daria R$ 2787.1 milhoes — mais que o dobro de todo o faturamento de 2021 a 2026 somado. Com o filtro, R$ 189.0 milhoes, que se sustenta contra R$ 301 milhoes faturados em 2025.
+
+### Carteira por ano de entrega prevista (so origens que faturam)
+
+| ano | pedidos | em aberto |
+|---|---:|---:|
+| 2020 | 1 | R$ 0.0 mi |
+| 2021 | 2,034 | R$ 10.9 mi |
+| 2022 | 2,249 | R$ 16.2 mi |
+| 2023 | 2,544 | R$ 17.9 mi |
+| 2024 | 1,870 | R$ 13.8 mi |
+| 2025 | 2,009 | R$ 24.3 mi |
+| 2026 | 4,520 | R$ 101.3 mi |
+| 2027 | 57 | R$ 4.6 mi |
+
+O grosso esta em **2026**. 2027 continua residual. E sobra um resto espalhado por 2021-2025: pedidos antigos que nunca foram faturados nem cancelados — provavelmente abandono, mas isso tambem e pergunta para a empresa.
+
+
+## Apendice — sentinela da ponte de servicos
+
+_Nota tecnica, nao e achado. Nao vai para a apresentacao._
+
+O sentinela `id_nota_saida_item = 0` da ponte de servicos (8,850 linhas, 82 pares distintos) foi verificado: `id_servico` esta preenchido e valido em todas. A ponte nao carrega valor, entao nao ha receita em risco.
+
+Os 62 codigos da LC 116 que so aparecem no sentinela **nao sao anomalia**: o catalogo fiscal vem pre-populado com a lista inteira da lei, e usar 22 de 84 codigos e o normal de uma industria. O sentinela apenas carrega o resto do catalogo.
+
+O que importa operacionalmente: os 10,452 pares uteis (99.2% dos vinculos) ficam em `stg_ponte_nota_saida_item_servico`, com o sentinela descartado. Era so isso que os "22% de orfaos" da secao 2 significavam.
 

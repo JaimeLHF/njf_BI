@@ -43,7 +43,15 @@ Tabelas: `fat_ordem_fabricacao`, `fat_ordem_roteiro`, `fat_ordem_movimento`,
 
 ## 2. Qual o tamanho e a composição da carteira em aberto de 2026-2027? *(obrigatória)*
 
-**Parcial — e o recorte 2027 é quase vazio.**
+**Respondível — resolvida em `marts.fct_pedido`.** Carteira de **R$ 189
+milhões**, sendo **R$ 101,3 milhões com entrega prevista em 2026** e apenas
+R$ 4,6 milhões em 2027. Além dos dois problemas do diagnóstico original,
+apareceu um terceiro ao construir o mart: **`origem_pedido = 'SIM'` são R$ 2,6
+bilhões com 0,0% de conversão em nota fiscal**. Sem separar por origem a
+carteira daria R$ 2,8 bi — o dobro de todo o faturamento do período. Ver
+`docs/qualidade.md` seção 10.
+
+O diagnóstico original, mantido:
 
 Dois problemas. Primeiro, **`fat_pedido_item.quantidade_saldo` não é saldo em
 aberto**: de 175.056 itens com saldo positivo, 169.190 (**96,6%**) já foram
@@ -205,11 +213,11 @@ Tabelas: `fat_nota_saida`, `fat_nota_saida_item`, `dim_tipo_nf_saida`,
 | # | Pergunta | Status |
 |---|----------|--------|
 | 1 | Aderência a prazo de produção | **respondível** (implementada) |
-| 2 | Carteira em aberto 2026-2027 | parcial |
+| 2 | Carteira em aberto 2026-2027 | **respondível** (implementada) |
 | 3 | Faturamento por ano/canal/representante | **respondível** (implementada) |
 | 4 | Lead time real de produção | parcial |
 | 5 | Gargalos por centro de trabalho | respondível |
-| 6 | Conversão pedido → faturamento | respondível |
+| 6 | Conversão pedido → faturamento | **respondível** (implementada) |
 | 7 | Mix vendido × produzido | respondível |
 | 8 | Taxa de refugo | sem dado |
 | 9 | Margem | sem dado |
