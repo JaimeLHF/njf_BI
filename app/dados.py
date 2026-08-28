@@ -5,8 +5,20 @@ consultável para demonstrar a triplicação, mas não alimenta indicador.
 
 Dois modos:
   - local (padrão): `dados.duckdb`, no grão dos marts, filtros livres.
-  - publicação (`MODO_PUBLICACAO=1`): `dados_pub.duckdb`, só tabelas agregadas,
-    recorte fixo. É o que vai para o Streamlit Community Cloud.
+  - publicação: `dados_pub.duckdb`, só tabelas agregadas, recorte fixo.
+    É o que vai para o Streamlit Community Cloud.
+
+O modo é decidido em três etapas, nesta ordem:
+
+  1. variável de ambiente `MODO_PUBLICACAO=1` — é o que se usa no shell local
+  2. secret `MODO_PUBLICACAO = "1"` — o Streamlit Cloud NÃO exporta secrets
+     como variável de ambiente, então é preciso ler `st.secrets` também
+  3. se nenhuma das duas disser nada: usa o arquivo que existir. No Cloud só
+     existe `dados_pub.duckdb`, porque `dados.duckdb` está no .gitignore
+
+A etapa 3 é o que torna o deploy à prova de configuração esquecida — sem ela,
+o app subia apontando para um arquivo inexistente e quebrava na primeira
+consulta.
 
 As páginas não sabem em qual modo estão: perguntam a `consultas.py`.
 """
@@ -18,8 +30,28 @@ import pandas as pd
 import streamlit as st
 
 RAIZ = Path(__file__).resolve().parent.parent
-PUBLICACAO = os.environ.get("MODO_PUBLICACAO", "0") == "1"
-BANCO = RAIZ / ("dados_pub.duckdb" if PUBLICACAO else "dados.duckdb")
+COMPLETO = RAIZ / "dados.duckdb"
+AGREGADO = RAIZ / "dados_pub.duckdb"
+
+
+def _secret(nome: str) -> str | None:
+    """st.secrets levanta exceção quando não há secrets.toml nenhum."""
+    try:
+        return st.secrets.get(nome)
+    except Exception:
+        return None
+
+
+def _modo_publicacao() -> bool:
+    for valor in (os.environ.get("MODO_PUBLICACAO"), _secret("MODO_PUBLICACAO")):
+        if valor is not None:
+            return str(valor).strip() == "1"
+    # ninguém disse nada: decide pelo que existe no disco
+    return not COMPLETO.exists() and AGREGADO.exists()
+
+
+PUBLICACAO = _modo_publicacao()
+BANCO = AGREGADO if PUBLICACAO else COMPLETO
 
 AVISO_PUBLICACAO = (
     "Versão de demonstração com dados agregados e anonimizados."
@@ -28,6 +60,13 @@ AVISO_PUBLICACAO = (
 
 @st.cache_resource
 def conexao():
+    if not BANCO.exists():
+        st.error(
+            f"Banco não encontrado: `{BANCO.name}`.\n\n"
+            "No Streamlit Cloud isso significa que `dados_pub.duckdb` não subiu "
+            "com o repositório. Local, rode `scripts/04_migrar_duckdb.py` e "
+            "`dbt build` para gerar `dados.duckdb`.")
+        st.stop()
     return duckdb.connect(str(BANCO), read_only=True)
 
 
