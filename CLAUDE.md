@@ -143,6 +143,14 @@ Todas medidas e registradas em `docs/qualidade.md`.
    trabalho: simulação ou pedido em negociação nunca liberado. Sem filtrar por
    `origem_converte_em_nf` a carteira dá R$ 2,8 bi em vez de R$ 189 mi.
 
+13. **`fat_pedido` tem 60 pedidos com valor irreal, todos em `SIM`.** 30 acima
+    de R$ 10 milhões, contra zero em `PDV`. A assinatura é digitação duplicada:
+    em 6 itens a quantidade é igual ao valor unitário (o maior pedido da base é
+    quantidade 11.747 × R$ 11.747,00 = R$ 138 mi). Mais 24 itens com quantidade
+    redonda de 10.000/40.000/100.000, contra p99 de 36 unidades. Não afeta a
+    carteira (2 pedidos, R$ 2,6 mi), mas destrói qualquer média ou série de
+    valor de pedido. Ver `docs/qualidade.md` seção 11.
+
 6. **`fat_ordem_roteiro.tempo_realizado` está vazio** (2.894 de 3,7M linhas).
    Tempo real vem de `fat_ordem_movimento.tempo_apontado`, preenchido em 91%.
 

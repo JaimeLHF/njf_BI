@@ -50,7 +50,8 @@ apareceu um terceiro ao construir o mart: **`origem_pedido = 'SIM'` são R$ 2,6
 bilhões que nunca geraram nem nota fiscal nem ordem de fabricação**, e estão
 100% em `PE` + `BLQ`. Sem separar por origem a carteira daria R$ 2,8 bi — o
 dobro de todo o faturamento do período. Ver `docs/qualidade.md` seção 10, que
-traz os três testes que sustentam deixar `SIM` de fora.
+traz os três testes que sustentam deixar `SIM` de fora, e a seção 11 para os
+60 pedidos com valor irreal que inflavam a série do canal.
 
 O diagnóstico original, mantido:
 

@@ -146,7 +146,9 @@ Nenhuma destas se responde com o dado que temos. Levar para a reuniao.
 
 4. **Qual a diferenca entre `flag_encerrada` e `cod_situacao` na ordem de fabricacao?** 96,2% das ordens com `flag_encerrada = 0` ja produziram quantidade e 98,9% tem previsao de fim no passado. A flag parece encerramento administrativo e `cod_situacao` o status real (1 = ativa, 0 = cancelada), mas isso e leitura nossa. Qual das duas define "ordem em aberto" para a fabrica?
 
-5. **`origem_pedido = 'SIM'` e simulacao ou pedido travado?** Investigamos com o proprio dado (secao 10): sao 116.429 pedidos e R$ 2,6 bilhoes que **nunca geraram uma nota fiscal nem uma ordem de fabricacao**, e estao **100% em `PE` + `BLQ`**, sem uma unica excecao em cinco anos. Trabalhamos com a hipotese de que sao simulacao/orcamento e por isso ficam **fora** da carteira de R$ 189 milhoes. Duas coisas a confirmar: (a) a hipotese esta certa? (b) se estiver, por que continuam entrando 9.697 por ano, R$ 426 milhoes so em 2026 — alguem trata isso como funil comercial?
+5. **`origem_pedido = 'SIM'` e o canal de revenda pendente de liberacao?** Os pedidos `SIM` sao **90% MULTIMARCAS** e **nunca geram ordem de fabricacao** (0 para 116.429 pedidos, contra 341.410 ordens do `PDV`). Nossa leitura e que representam **intencao de compra do canal de revenda, pendente de liberacao** (credito, pedido minimo, colecao), enquanto FLAGSHIP e loja propria e libera direto — o que explica os 100% em `PE` + `BLQ`. Confirmam? E alguem acompanha esse volume como funil comercial?
+
+   Correcao importante para a conversa: o numero certo do funil e **~R$ 138 milhoes anualizados em 2026, estavel**, nao os R$ 426 milhoes do agregado bruto. A diferenca sao 60 pedidos com valor irreal, que a secao 11 detalha.
 
 6. **Como a fabrica aponta producao?** A mediana do tempo entre o primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo cai no mesmo dia. Se o apontamento e feito em lote no fechamento, o tempo de ciclo nao esta no dado. E `data_abertura` vem depois do primeiro apontamento em 24,8% das ordens — o que ela marca de fato?
 
@@ -233,9 +235,48 @@ Sem o filtro de origem a carteira daria R$ 2787.1 milhoes — mais que o dobro d
 
 **3. `SIM` e um estado, nao uma origem.** Os 116.429 pedidos estao **100% em `situacao_pedido = 'PE'` e `status_liberacao = 'BLQ'`** — 0 excecoes. Nenhum foi liberado, nunca, em cinco anos. Ja `PDV` tem 75.996 pedidos atendidos e liberados. Mesmas empresas emitentes (1, 11, 21), mesmo perfil de produto configurado (88% dos itens com mascara em ambas). Nao e outro sistema: e o mesmo fluxo parado num estagio anterior.
 
-**Leitura:** `SIM` parece simulacao ou pedido em negociacao que nunca foi liberado — coerente com o nome e com produto configurado. Por isso fica fora da carteira. O que **nao** fecha: continua entrando volume novo (9,697 pedidos e R$ 426.7 milhoes so em 2026, o maior valor anual da serie). Se e simulacao descartavel, alguem ainda esta produzindo muita simulacao; se e funil comercial, tem valor de negocio e merece um indicador proprio.
+**Leitura:** `SIM` e **intencao de compra do canal de revenda, pendente de liberacao** — 90% MULTIMARCAS, 100% bloqueado, nunca produzido. `PDV` e dominado por FLAGSHIP, loja propria, que libera direto. Por isso `SIM` fica fora da carteira.
+
+**O volume nao esta crescendo.** O agregado bruto de 2026 (R$ 426.7 milhoes) engana: sao 60 pedidos com valor irreal (secao 11). Tirando os pedidos acima de R$ 1 milhao, a serie e plana:
+
+| ano | pedidos | valor (sem outliers) |
+|---|---:|---:|
+| 2021 | 39,599 | R$ 274.1 mi |
+| 2022 | 16,517 | R$ 119.6 mi |
+| 2023 | 16,305 | R$ 102.0 mi |
+| 2024 | 17,092 | R$ 119.3 mi |
+| 2025 | 17,128 | R$ 172.6 mi |
+| 2026 | 9,677 | R$ 92.2 mi |
+
+O numero de pedidos por ano esta estavel desde 2022 (16-17 mil) e 2026 projeta na mesma faixa. **Nao e funil em crescimento nem acumulo de registros: e um canal de tamanho constante que nunca foi medido.**
 
 O grosso da carteira esta em **2026**. 2027 continua residual. E sobra um resto espalhado por 2021-2025: pedidos antigos que nunca foram faturados nem cancelados — provavelmente abandono, mas isso tambem e pergunta para a empresa.
+
+
+## 11. Pedidos com valor irreal
+
+Apareceu ao investigar por que o valor de `SIM` saltou em 2026. Nao era o canal: era um punhado de pedidos com valor impossivel.
+
+| origem | pedidos | mediana | p99 | maior | > R$ 1 mi | > R$ 10 mi |
+|---|---:|---:|---:|---:|---:|---:|
+| `SIM` | 116,429 | R$ 3,170 | R$ 78,296 | R$ 137.99 mi | 60 | 30 |
+| `PDV` | 86,296 | R$ 5,106 | R$ 202,454 | R$ 2.88 mi | 13 | 0 |
+| `EXP` | 185 | R$ 3,184 | R$ 120,138 | R$ 0.17 mi | 0 | 0 |
+| `ORC` | 8 | R$ 10,000 | R$ 132,365 | R$ 0.13 mi | 0 | 0 |
+
+`PDV` nao tem **nenhum** pedido acima de R$ 10 milhoes; `SIM` tem 30. Numa industria que fatura ~R$ 300 milhoes por ano, um pedido unico de R$ 137.99 milhoes nao existe.
+
+### A assinatura do erro
+
+Em 6 itens (R$ 158.6 milhoes) a **quantidade e igual ao valor unitario** — o mesmo numero digitado nos dois campos. O maior pedido da base e exatamente isso: um item, quantidade 11.747, valor unitario R$ 11.747,00, total R$ 138 milhoes.
+
+O resto sao quantidades redondas de teste: 24 itens com quantidade exata de 10.000, 40.000 ou 100.000, contra um p99 de 36 unidades. O maximo e 432,432 unidades num unico item.
+
+### Impacto
+
+**A carteira nao e afetada.** Sao 2 pedidos outlier nas origens que faturam: R$ 189.0 milhoes com eles, R$ 186.4 milhoes sem. O problema esta concentrado em `SIM`, que ja fica fora da carteira por outro motivo.
+
+O que **e** afetado: qualquer media, ticket medio ou serie temporal de valor de pedido que inclua `SIM` sem filtro de outlier. Foi exatamente o que fez o funil de 2026 parecer tres vezes maior do que e.
 
 
 ## Apendice — sentinela da ponte de servicos

@@ -413,15 +413,19 @@ def secao_perguntas():
         "(1 = ativa, 0 = cancelada), mas isso e leitura nossa. Qual das duas "
         "define \"ordem em aberto\" para a fabrica?",
         "",
-        "5. **`origem_pedido = \'SIM\'` e simulacao ou pedido travado?** "
-        "Investigamos com o proprio dado (secao 10): sao 116.429 pedidos e "
-        "R$ 2,6 bilhoes que **nunca geraram uma nota fiscal nem uma ordem de "
-        "fabricacao**, e estao **100% em `PE` + `BLQ`**, sem uma unica "
-        "excecao em cinco anos. Trabalhamos com a hipotese de que sao "
-        "simulacao/orcamento e por isso ficam **fora** da carteira de R$ 189 "
-        "milhoes. Duas coisas a confirmar: (a) a hipotese esta certa? (b) se "
-        "estiver, por que continuam entrando 9.697 por ano, R$ 426 milhoes so "
-        "em 2026 — alguem trata isso como funil comercial?",
+        "5. **`origem_pedido = \'SIM\'` e o canal de revenda pendente de "
+        "liberacao?** Os pedidos `SIM` sao **90% MULTIMARCAS** e **nunca geram "
+        "ordem de fabricacao** (0 para 116.429 pedidos, contra 341.410 ordens "
+        "do `PDV`). Nossa leitura e que representam **intencao de compra do "
+        "canal de revenda, pendente de liberacao** (credito, pedido minimo, "
+        "colecao), enquanto FLAGSHIP e loja propria e libera direto — o que "
+        "explica os 100% em `PE` + `BLQ`. Confirmam? E alguem acompanha esse "
+        "volume como funil comercial?",
+        "",
+        "   Correcao importante para a conversa: o numero certo do funil e "
+        "**~R$ 138 milhoes anualizados em 2026, estavel**, nao os R$ 426 "
+        "milhoes do agregado bruto. A diferenca sao 60 pedidos com valor "
+        "irreal, que a secao 11 detalha.",
         "",
         "6. **Como a fabrica aponta producao?** A mediana do tempo entre o "
         "primeiro e o ultimo apontamento de uma ordem e zero dias: quase tudo "
@@ -648,6 +652,13 @@ def secao_carteira(con):
         SELECT (SELECT count(*) FROM s),
                (SELECT count(*) FROM s JOIN d USING (id_estabelecimento, v))
     """).fetchone()
+    serie_limpa = con.execute("""
+        SELECT year(data_emissao), count(*), round(sum(valor_liquido) / 1e6, 1)
+        FROM staging.stg_fat_pedido
+        WHERE origem_pedido = 'SIM' AND valor_liquido <= 1e6
+          AND year(data_emissao) >= 2021
+        GROUP BY 1 ORDER BY 1
+    """).fetchall()
     sim_2026 = con.execute("""
         SELECT count(*), round(sum(valor_liquido) / 1e6, 1)
         FROM staging.stg_fat_pedido
@@ -684,18 +695,102 @@ def secao_carteira(con):
         "itens com mascara em ambas). Nao e outro sistema: e o mesmo fluxo "
         "parado num estagio anterior.",
         "",
-        "**Leitura:** `SIM` parece simulacao ou pedido em negociacao que nunca "
-        "foi liberado — coerente com o nome e com produto configurado. Por isso "
-        "fica fora da carteira. O que **nao** fecha: continua entrando volume "
-        f"novo ({sim_2026[0]:,} pedidos e R$ {sim_2026[1]} milhoes so em 2026, "
-        "o maior valor anual da serie). Se e simulacao descartavel, alguem "
-        "ainda esta produzindo muita simulacao; se e funil comercial, tem valor "
-        "de negocio e merece um indicador proprio.",
+        "**Leitura:** `SIM` e **intencao de compra do canal de revenda, pendente "
+        "de liberacao** — 90% MULTIMARCAS, 100% bloqueado, nunca produzido. "
+        "`PDV` e dominado por FLAGSHIP, loja propria, que libera direto. Por "
+        "isso `SIM` fica fora da carteira.",
+        "",
+        "**O volume nao esta crescendo.** O agregado bruto de 2026 "
+        f"(R$ {sim_2026[1]} milhoes) engana: sao 60 pedidos com valor irreal "
+        "(secao 11). Tirando os pedidos acima de R$ 1 milhao, a serie e plana:",
+        "",
+        "| ano | pedidos | valor (sem outliers) |",
+        "|---|---:|---:|",
+    ] + [
+        f"| {a} | {ped:,} | R$ {mi} mi |" for a, ped, mi in serie_limpa
+    ] + [
+        "",
+        "O numero de pedidos por ano esta estavel desde 2022 (16-17 mil) e 2026 "
+        "projeta na mesma faixa. **Nao e funil em crescimento nem acumulo de "
+        "registros: e um canal de tamanho constante que nunca foi medido.**",
         "",
         "O grosso da carteira esta em **2026**. 2027 continua residual. E sobra um resto "
         "espalhado por 2021-2025: pedidos antigos que nunca foram faturados nem "
         "cancelados — provavelmente abandono, mas isso tambem e pergunta para a "
         "empresa.",
+        "",
+    ]
+    return out, []
+
+
+def secao_outliers(con):
+    """Pedidos com valor irreal, achados ao investigar a serie do SIM."""
+    linhas = con.execute("""
+        SELECT origem_pedido, count(*),
+               round(median(valor_liquido), 0),
+               round(quantile_cont(valor_liquido, 0.99), 0),
+               round(max(valor_liquido) / 1e6, 2),
+               count(*) FILTER (WHERE valor_liquido > 1e6),
+               count(*) FILTER (WHERE valor_liquido > 1e7)
+        FROM staging.stg_fat_pedido GROUP BY 1 ORDER BY 2 DESC
+    """).fetchall()
+    dig = con.execute("""
+        SELECT count(*), round(sum(valor_item_liquido) / 1e6, 1)
+        FROM marts.fct_pedido
+        WHERE quantidade = valor_unitario_liquido AND quantidade > 100
+    """).fetchone()
+    qtd = con.execute("""
+        SELECT round(quantile_cont(quantidade, 0.99), 0), round(max(quantidade), 0),
+               count(*) FILTER (WHERE quantidade IN (10000, 40000, 100000))
+        FROM marts.fct_pedido
+    """).fetchone()
+    cart, cart_sem, ped_out = con.execute("""
+        SELECT round(sum(valor_em_aberto) / 1e6, 1),
+               round(sum(valor_em_aberto) FILTER (WHERE valor_item_liquido <= 1e6)
+                     / 1e6, 1),
+               count(DISTINCT id_pedido) FILTER (WHERE valor_item_liquido > 1e6)
+        FROM marts.fct_pedido
+        WHERE origem_converte_em_nf AND situacao_pedido <> 'C'
+    """).fetchone()
+
+    out = [
+        "Apareceu ao investigar por que o valor de `SIM` saltou em 2026. Nao "
+        "era o canal: era um punhado de pedidos com valor impossivel.",
+        "",
+        "| origem | pedidos | mediana | p99 | maior | > R$ 1 mi | > R$ 10 mi |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for orig, ped, p50, p99, mx, a1, a10 in linhas:
+        out.append(f"| `{orig}` | {ped:,} | R$ {p50:,.0f} | R$ {p99:,.0f} | "
+                   f"R$ {mx} mi | {a1} | {a10} |")
+    out += [
+        "",
+        f"`PDV` nao tem **nenhum** pedido acima de R$ 10 milhoes; `SIM` tem 30. "
+        "Numa industria que fatura ~R$ 300 milhoes por ano, um pedido unico de "
+        f"R$ {linhas[0][4]} milhoes nao existe.",
+        "",
+        "### A assinatura do erro",
+        "",
+        f"Em {dig[0]} itens (R$ {dig[1]} milhoes) a **quantidade e igual ao "
+        "valor unitario** — o mesmo numero digitado nos dois campos. O maior "
+        "pedido da base e exatamente isso: um item, quantidade 11.747, valor "
+        "unitario R$ 11.747,00, total R$ 138 milhoes.",
+        "",
+        f"O resto sao quantidades redondas de teste: {qtd[2]} itens com "
+        "quantidade exata de 10.000, 40.000 ou 100.000, contra um p99 de "
+        f"{qtd[0]:.0f} unidades. O maximo e {qtd[1]:,.0f} unidades num unico "
+        "item.",
+        "",
+        "### Impacto",
+        "",
+        f"**A carteira nao e afetada.** Sao {ped_out} pedidos outlier nas "
+        f"origens que faturam: R$ {cart} milhoes com eles, R$ {cart_sem} "
+        "milhoes sem. O problema esta concentrado em `SIM`, que ja fica fora "
+        "da carteira por outro motivo.",
+        "",
+        "O que **e** afetado: qualquer media, ticket medio ou serie temporal "
+        "de valor de pedido que inclua `SIM` sem filtro de outlier. Foi "
+        "exatamente o que fez o funil de 2026 parecer tres vezes maior do que e.",
         "",
     ]
     return out, []
@@ -772,6 +867,7 @@ def main():
         ("", secao_perguntas()),
         ("9. Efeito da correcao de prazo nos marts", secao_marts(con)),
         ("10. Carteira em aberto: o filtro que faltava", secao_carteira(con)),
+        ("11. Pedidos com valor irreal", secao_outliers(con)),
         ("Apendice — sentinela da ponte de servicos",
          nota_rodape_servico(con)),
     ]:
