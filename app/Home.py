@@ -2,10 +2,13 @@ from datetime import date
 
 import streamlit as st
 
+import estilo
+from componentes import card_kpi
 from dados import brl, consulta, pct
 
 st.set_page_config(page_title="BI — Vendas e Produção", page_icon="📊",
                    layout="wide")
+estilo.aplicar()
 
 st.title("BI — Vendas e Produção")
 st.caption("Dados do DW `erp_bi`. Todos os números saem da camada `marts`, "
@@ -26,25 +29,34 @@ resumo = consulta("""
             AND situacao_pedido <> 'C')                              AS carteira
 """).iloc[0]
 
-a, b, c = st.columns(3)
-a.metric(f"Faturamento em {ano}", brl(resumo.fat_ano * 1e6),
-         help="Só NF que gera financeiro, sem devolução. A página de "
-              "Faturamento abre com os últimos 24 meses, por isso mostra um "
-              "número maior.")
-b.metric("Ordens no prazo — série completa", pct(resumo.no_prazo),
-         help="Todas as ordens ativas desde 2020, medidas pela conclusão real "
-              "do apontamento. A página de Produção abre com os últimos 24 "
-              "meses e mostra um número um pouco diferente.")
-c.metric("Carteira em aberto — hoje", brl(resumo.carteira * 1e6),
-         help="Só origens que faturam e quantidade plausível. Não depende de "
-              "período: é a posição atual.")
+a, b, c = st.columns(3, gap="small")
+with a:
+    card_kpi(f"Faturamento em {ano}", brl(resumo.fat_ano * 1e6),
+             "só NF que gera financeiro, sem devolução")
+with b:
+    card_kpi("Ordens no prazo — série completa", pct(resumo.no_prazo),
+             "desde 2020, pela conclusão real do apontamento")
+with c:
+    card_kpi("Carteira em aberto — hoje", brl(resumo.carteira * 1e6),
+             "origens que faturam, quantidade plausível")
+
+st.caption(
+    "Os três números acima usam recortes diferentes — ano corrente, série "
+    "completa e posição de hoje. Cada página abre no seu próprio período, "
+    "então os valores não batem com estes por construção. O período está "
+    "sempre no rótulo.")
 
 st.divider()
 
 st.subheader("As três páginas")
-st.page_link("pages/1_Faturamento.py", label="**Faturamento** — evolução, canal e representante", icon="💰")
-st.page_link("pages/2_Producao.py", label="**Produção** — aderência a prazo medida pelo apontamento", icon="🏭")
-st.page_link("pages/3_Carteira.py", label="**Carteira** — pedidos em aberto e idade da carteira", icon="📋")
+st.page_link("pages/1_Faturamento.py",
+             label="**Faturamento** — evolução, canal e representante", icon="💰")
+st.page_link("pages/2_Producao.py",
+             label="**Produção** — aderência a prazo medida pelo apontamento",
+             icon="🏭")
+st.page_link("pages/3_Carteira.py",
+             label="**Carteira** — pedidos em aberto e idade da carteira",
+             icon="📋")
 
 st.divider()
 
@@ -68,13 +80,6 @@ pedido.** A coluna de saldo não é baixada no faturamento, e a origem `SIM` sã
 R$ 2,6 bilhões que nunca geraram nota nem ordem de fabricação. Com os dois
 cuidados, a carteira é R$ 189 milhões em vez de R$ 2,8 bilhões.
 """)
-
-st.caption(
-    "Os três números acima usam recortes diferentes — ano corrente, série "
-    "completa e posição de hoje. Cada página abre no seu próprio período, "
-    "então os valores não batem com estes por construção. O período está no "
-    "rótulo de cada indicador."
-)
 
 st.info("Cada página traz, no rodapé, o que os filtros padrão removeram. "
         "Desligar um filtro é legítimo — desligar sem saber o que ele fazia, não.",

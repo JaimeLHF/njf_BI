@@ -1,11 +1,18 @@
+from datetime import date, timedelta
+
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import estilo
 import tema
-from dados import brl, consulta, delta_pct, filtro_lista, numero, opcoes, periodo
+from componentes import card_grafico, card_kpi
+from dados import (brl, consulta, delta_pct, filtro_lista, numero, opcoes,
+                   periodo)
 
 st.set_page_config(page_title="Faturamento", page_icon="💰", layout="wide")
+estilo.aplicar()
+
 st.title("Faturamento")
 titulo_periodo = st.empty()
 
@@ -17,8 +24,9 @@ canais = opcoes("fct_faturamento", "canal_venda")
 with st.sidebar:
     st.header("Filtros")
     de, ate = st.date_input(
-        "Período", value=(max(inicio_base, fim_base.replace(year=fim_base.year - 2)),
-                          fim_base),
+        "Período",
+        value=(max(inicio_base, fim_base.replace(year=fim_base.year - 2)),
+               fim_base),
         min_value=inicio_base, max_value=fim_base)
     sel_empresa = st.multiselect("Empresa", empresas)
     sel_canal = st.multiselect("Canal de venda", canais)
@@ -49,26 +57,23 @@ w = " AND ".join(onde)
 par = (de, ate)
 
 dias = (ate - de).days or 1
-par_anterior = (de - __import__("datetime").timedelta(days=dias), de)
+par_anterior = (de - timedelta(days=dias), de)
 
 # ---------------------------------------------------------------- KPIs
 kpi = consulta(f"""
     SELECT sum(valor_liquido) AS receita, count(DISTINCT id_nota_saida) AS notas,
-           count(DISTINCT id_cliente) AS clientes,
-           sum(valor_bruto) AS bruto
+           count(DISTINCT id_cliente) AS clientes, sum(valor_bruto) AS bruto
     FROM marts.fct_faturamento WHERE {w}
 """, par).iloc[0]
 
 onde_ant = [o for o in onde if not o.startswith("data_emissao")]
 kpi_ant = consulta(f"""
-    SELECT sum(valor_liquido) AS receita
-    FROM marts.fct_faturamento
+    SELECT sum(valor_liquido) AS receita FROM marts.fct_faturamento
     WHERE data_emissao >= ? AND data_emissao < ? AND {' AND '.join(onde_ant)}
 """, par_anterior).iloc[0]
 
-# Devolução é sempre medida sobre o período inteiro, sem os filtros de
-# natureza da operação: senão o próprio filtro zera o indicador que ele deveria
-# explicar. Todas as devoluções são de tipos que não geram financeiro.
+# Devolução sempre sobre o período inteiro, sem os filtros de natureza da
+# operação: senão o próprio filtro zera o indicador que deveria explicar.
 devolucao = consulta(f"""
     SELECT coalesce(sum(valor_liquido), 0) AS v,
            count(DISTINCT id_nota_saida) AS notas
@@ -78,27 +83,28 @@ devolucao = consulta(f"""
       AND {filtro_lista('canal_venda', sel_canal, canais)}
 """, par).iloc[0]
 
-a, b, c, d = st.columns(4)
-a.metric("Faturamento líquido", brl(kpi.receita),
-         delta_pct(kpi.receita, kpi_ant.receita))
-b.metric("Notas emitidas", numero(kpi.notas),
-         f"ticket {brl(kpi.receita / kpi.notas) if kpi.notas else '—'}")
-c.metric("Clientes ativos", numero(kpi.clientes))
-d.metric("Devoluções no período", brl(devolucao.v),
-         f"{numero(devolucao.notas)} notas" if devolucao.notas else None,
-         delta_color="inverse",
-         help="Medido sobre o período inteiro, independente dos filtros de "
-              "natureza da operação — do contrário o filtro zeraria o próprio "
-              "indicador.")
-
 titulo_periodo.caption(
     f"Período: **{de:%b/%Y} a {ate:%b/%Y}**. A Home mostra só o ano corrente, "
     "por isso o número lá é menor.")
 
-st.divider()
+a, b, c, d = st.columns(4, gap="small")
+with a:
+    card_kpi("Faturamento líquido", brl(kpi.receita),
+             delta_pct(kpi.receita, kpi_ant.receita))
+with b:
+    card_kpi("Notas emitidas", numero(kpi.notas),
+             f"ticket {brl(kpi.receita / kpi.notas)}" if kpi.notas else None)
+with c:
+    card_kpi("Clientes ativos", numero(kpi.clientes), "distintos no período")
+with d:
+    card_kpi("Devoluções no período", brl(devolucao.v),
+             f"{numero(devolucao.notas)} notas — medido sem os filtros de "
+             "natureza da operação" if devolucao.notas else None,
+             cor=tema.AMBAR)
 
-# ---------------------------------------------------------------- gráficos
-# Série por mês do ano, para sobrepor os anos no mesmo eixo.
+st.write("")
+
+# ------------------------------------------------- série ano contra ano
 mensal = consulta(f"""
     SELECT year(data_emissao) AS ano, month(data_emissao) AS mes_num,
            sum(valor_liquido) / 1e6 AS receita
@@ -108,39 +114,35 @@ mensal = consulta(f"""
 MESES = ["jan", "fev", "mar", "abr", "mai", "jun",
          "jul", "ago", "set", "out", "nov", "dez"]
 mensal["rotulo"] = mensal.mes_num.map(lambda m: MESES[m - 1])
-
-# O mês corrente está incompleto: sem marcar isso a queda no fim da série
-# parece colapso de vendas.
-hoje = __import__("datetime").date.today()
+hoje = date.today()
 incompleto = (mensal.ano == hoje.year) & (mensal.mes_num == hoje.month)
 
-e, f = st.columns([3, 2])
+e, f = st.columns([3, 2], gap="small")
 with e:
     fig = go.Figure()
     anos = sorted(mensal.ano.unique())
-    for i, a_ in enumerate(anos):
-        d = mensal[mensal.ano == a_]
+    for a_ in anos:
+        d_ = mensal[mensal.ano == a_]
         atual = a_ == anos[-1]
         fig.add_scatter(
-            x=d.rotulo, y=d.receita, name=str(a_), mode="lines+markers",
+            x=d_.rotulo, y=d_.receita, name=str(a_), mode="lines+markers",
             line=dict(color=tema.AZUL if atual else tema.CINZA,
-                      width=3 if atual else 1.5,
+                      width=2.5 if atual else 1.5,
                       dash=None if atual else "dot"),
-            marker=dict(size=7 if atual else 4),
-            hovertemplate=f"{a_} %{{x}}<br>R$ %{{y:.1f}} mi<extra></extra>")
+            marker=dict(size=6 if atual else 4),
+            hovertemplate="R$ %{y:.1f} mi<extra>%{fullData.name}</extra>")
     if incompleto.any():
         ponto = mensal[incompleto].iloc[0]
-        fig.add_scatter(
-            x=[ponto.rotulo], y=[ponto.receita], mode="markers", name="incompleto",
-            marker=dict(size=14, color="white", line=dict(color=tema.AMBAR, width=3)),
-            hovertemplate=f"{ponto.rotulo} — mês em andamento<extra></extra>")
-        fig.add_annotation(x=ponto.rotulo, y=ponto.receita, text="mês<br>incompleto",
-                           showarrow=True, arrowhead=0, ax=0, ay=-38,
-                           font=dict(size=11, color=tema.AMBAR))
+        fig.add_annotation(x=ponto.rotulo, y=ponto.receita, text="incompleto",
+                           showarrow=True, arrowhead=0, arrowcolor=tema.AMBAR,
+                           ax=0, ay=-30, font=dict(size=10, color=tema.AMBAR))
     fig.update_yaxes(title="R$ milhões")
-    fig.update_xaxes(title=None, categoryorder="array", categoryarray=MESES)
-    st.plotly_chart(tema.aplicar(fig, "Faturamento mensal, ano contra ano"),
-                    width='stretch')
+    fig.update_xaxes(categoryorder="array", categoryarray=MESES)
+    card_grafico(
+        "Faturamento mensal, ano contra ano",
+        tema.aplicar(fig, tema.ALTURA_LINHA, unificado=True),
+        "O ano corrente em azul; anteriores pontilhados. O último ponto é um "
+        "mês em andamento — a queda no fim da linha não é queda de vendas.")
 
 with f:
     canal = consulta(f"""
@@ -149,12 +151,15 @@ with f:
         FROM marts.fct_faturamento WHERE {w} GROUP BY 1 ORDER BY 2 DESC
     """, par)
     fig = px.bar(canal.head(8), x="receita", y="canal", orientation="h")
-    fig.update_traces(marker_color=tema.AZUL, hovertemplate="%{y}<br>R$ %{x:.1f} mi")
+    fig.update_traces(marker_color=tema.AZUL,
+                      hovertemplate="%{y}<br>R$ %{x:.1f} mi<extra></extra>")
     fig.update_yaxes(title=None, autorange="reversed")
     fig.update_xaxes(title="R$ milhões")
-    st.plotly_chart(tema.aplicar(fig, "Por canal de venda"), width='stretch')
+    card_grafico("Por canal de venda", tema.aplicar(fig, tema.ALTURA_LINHA))
 
-g, h = st.columns(2)
+st.write("")
+
+g, h = st.columns(2, gap="small")
 with g:
     canal_mes = consulta(f"""
         SELECT date_trunc('month', data_emissao) AS mes,
@@ -163,17 +168,17 @@ with g:
         FROM marts.fct_faturamento WHERE {w} GROUP BY 1, 2 ORDER BY 1
     """, par)
     top = canal_mes.groupby("canal").receita.sum().nlargest(5).index
-    canal_mes["canal"] = canal_mes.canal.where(canal_mes.canal.isin(top), "outros")
+    canal_mes["canal"] = canal_mes.canal.where(canal_mes.canal.isin(top),
+                                               "outros")
     fig = px.bar(canal_mes.groupby(["mes", "canal"], as_index=False).receita.sum(),
                  x="mes", y="receita", color="canal")
     fig.update_yaxes(title="R$ milhões")
     fig.update_xaxes(title=None)
-    st.plotly_chart(tema.aplicar(fig, "Composição mensal por canal"),
-                    width='stretch')
+    card_grafico("Composição mensal por canal", tema.aplicar(fig))
 
 with h:
     # Substituiu o gráfico de famílias: cod_familia não tem descrição em lugar
-    # nenhum do DW, e um eixo com "33299, 8430, 44879" não comunica nada.
+    # nenhum do DW, e um eixo com "33299, 8430" não comunica nada.
     rep = consulta(f"""
         SELECT coalesce(nome_representante, 'sem representante') AS nome,
                sum(valor_liquido) / 1e6 AS receita,
@@ -190,7 +195,10 @@ with h:
                       "<br>ticket R$ %{customdata[1]:,.0f}<extra></extra>")
     fig.update_yaxes(title=None, autorange="reversed")
     fig.update_xaxes(title="R$ milhões")
-    st.plotly_chart(tema.aplicar(fig, "Top 10 representantes"), width='stretch')
+    card_grafico(
+        "Top 10 representantes", tema.aplicar(fig),
+        "Não há gráfico por família: são 2.584 famílias sem descrição no DW e "
+        "sem nível hierárquico acima — o eixo sairia só com códigos.")
 
 # ---------------------------------------------------------------- rodapé
 removido = consulta(f"""
@@ -208,10 +216,6 @@ if so_financeiro:
                   "financeiro (remessa, bonificação, amostra)")
 if sem_devolucao:
     partes.append(f"**{numero(removido.devol)} notas** de devolução")
-st.caption("Não há gráfico por família de produto: são 2.584 famílias sem "
-           "descrição no DW e sem nível hierárquico acima, então o eixo sairia "
-           "só com códigos. Ver `docs/qualidade.md`, pergunta 7.")
-
 st.caption("Os filtros padrão removeram " + " e ".join(partes) + "."
            if partes else "Nenhum filtro de natureza da operação está ativo — "
                           "o total mistura venda com remessa e devolução.")

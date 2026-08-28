@@ -2,10 +2,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import estilo
 import tema
+from componentes import card_grafico, card_kpi, card_texto
 from dados import brl, consulta, filtro_lista, numero, opcoes, pct
 
 st.set_page_config(page_title="Carteira", page_icon="📋", layout="wide")
+estilo.aplicar()
+
 st.title("Carteira em aberto")
 st.caption("Posição de **hoje**, não um período: itens de pedido ainda não "
            "faturados nem cancelados, qualquer que seja a data de emissão. "
@@ -72,18 +76,20 @@ kpi = consulta(f"""
     FROM marts.fct_pedido WHERE {w}
 """).iloc[0]
 
-a, b, c, d = st.columns(4)
-a.metric("Carteira em aberto", brl(kpi.carteira))
-b.metric("Pedidos em aberto", numero(kpi.pedidos),
-         f"média {brl(kpi.carteira / kpi.pedidos)}" if kpi.pedidos else None)
-c.metric("Carteira vencida", pct(kpi.pct_vencida),
-         f"{pct(kpi.pct_velha)} há mais de 1 ano" if kpi.pct_velha else None,
-         delta_color="inverse",
-         help="Entrega prevista já passou e o item continua sem faturamento e "
-              "sem cancelamento.")
-d.metric("Dias até 1º faturamento",
-         f"{kpi.dias:.0f} dias" if kpi.dias is not None else "—",
-         delta_color="off", help="Mediana histórica, do pedido à primeira nota.")
+a, b, c, d = st.columns(4, gap="small")
+with a:
+    card_kpi("Carteira em aberto", brl(kpi.carteira), "posição de hoje")
+with b:
+    card_kpi("Pedidos em aberto", numero(kpi.pedidos),
+             f"média {brl(kpi.carteira / kpi.pedidos)}" if kpi.pedidos else None)
+with c:
+    card_kpi("Carteira vencida", pct(kpi.pct_vencida),
+             f"{pct(kpi.pct_velha)} há mais de 1 ano" if kpi.pct_velha else None,
+             cor=tema.VERMELHO)
+with d:
+    card_kpi("Dias até 1º faturamento",
+             f"{kpi.dias:.0f} dias" if kpi.dias is not None else "—",
+             "mediana histórica, do pedido à primeira nota")
 
 if kpi.pct_velha and kpi.pct_velha > 20:
     st.error(
@@ -93,13 +99,13 @@ if kpi.pct_velha and kpi.pct_velha > 20:
         "valor só cresce. É pergunta aberta para a empresa "
         "(`docs/qualidade.md`, seção 8).", icon="🚨")
 
-st.divider()
+st.write("")
 
 # ------------------------------------------------- aging (segunda posição)
 ordem_aging = ["vencida ha mais de 1 ano", "vencida ha menos de 1 ano",
                "a vencer", "sem data prevista"]
-rotulo = {"vencida ha mais de 1 ano": "Vencida há +1 ano<br>(abandono provável)",
-          "vencida ha menos de 1 ano": "Vencida há -1 ano<br>(atraso operacional)",
+rotulo = {"vencida ha mais de 1 ano": "Vencida há +1 ano",
+          "vencida ha menos de 1 ano": "Vencida há -1 ano",
           "a vencer": "A vencer", "sem data prevista": "Sem data prevista"}
 cor = {"vencida ha mais de 1 ano": tema.VERMELHO,
        "vencida ha menos de 1 ano": tema.AMBAR,
@@ -113,28 +119,28 @@ aging = consulta(f"""
 aging["ord"] = aging.faixa.map({f: i for i, f in enumerate(ordem_aging)})
 aging = aging.sort_values("ord")
 
-e, f = st.columns([3, 2])
+e, f = st.columns([3, 2], gap="small")
 with e:
     fig = go.Figure()
     for _, r in aging.iterrows():
         fig.add_bar(x=[r.valor], y=[rotulo.get(r.faixa, r.faixa)],
                     orientation="h", marker_color=cor.get(r.faixa, tema.CINZA),
-                    name=rotulo.get(r.faixa, r.faixa),
                     hovertemplate=f"R$ {r.valor:.1f} mi<br>{r.pedidos:,} pedidos"
                                   "<extra></extra>")
     fig.update_layout(barmode="stack")
     fig.update_xaxes(title="R$ milhões")
     fig.update_yaxes(title=None, autorange="reversed")
-    fig = tema.aplicar(fig, "Idade da carteira — vencido há +1 ano é outra natureza")
-    fig.update_layout(showlegend=False, margin_b=8)
-    st.plotly_chart(fig, width='stretch')
+    fig = tema.aplicar(fig, tema.ALTURA_LINHA)
+    fig.update_layout(showlegend=False, margin_b=40)
+    card_grafico("Idade da carteira", fig,
+                 "Vencido há mais de um ano é outra natureza: abandono "
+                 "provável, não atraso.")
 
 with f:
-    st.markdown("#### Como ler")
-    st.markdown("""
-**Vencida há mais de 1 ano** é abandono provável: o pedido passou da entrega
-prevista, nunca foi faturado e nunca foi cancelado. Tratar como compromisso
-superestima a carteira.
+    card_texto("Como ler", """
+**Vencida há mais de 1 ano** é abandono provável: passou da entrega prevista,
+nunca foi faturada e nunca foi cancelada. Tratar como compromisso superestima
+a carteira.
 
 **Vencida há menos de 1 ano** é atraso operacional — ainda pode virar nota, e
 é aqui que dá para agir.
@@ -142,8 +148,9 @@ superestima a carteira.
 **A vencer** é a carteira no sentido estrito: compromisso com data futura.
 """)
 
-# ---------------------------------------------------------------- gráficos
-g, h = st.columns(2)
+st.write("")
+
+g, h = st.columns(2, gap="small")
 with g:
     mensal = consulta(f"""
         SELECT date_trunc('month', data_entrega_prevista) AS mes,
@@ -156,12 +163,11 @@ with g:
     """)
     mensal["situacao"] = mensal.vencida.map({True: "vencida", False: "a vencer"})
     fig = px.bar(mensal, x="mes", y="valor", color="situacao",
-                 color_discrete_map={"vencida": tema.VERMELHO_CLARO,
+                 color_discrete_map={"vencida": tema.VERMELHO,
                                      "a vencer": tema.AZUL})
     fig.update_yaxes(title="R$ milhões")
     fig.update_xaxes(title=None)
-    st.plotly_chart(tema.aplicar(fig, "Carteira por mês de entrega prevista"),
-                    width='stretch')
+    card_grafico("Carteira por mês de entrega prevista", tema.aplicar(fig))
 
 with h:
     canal = consulta(f"""
@@ -170,13 +176,14 @@ with h:
         FROM marts.fct_pedido WHERE {w} GROUP BY 1 ORDER BY 2 DESC LIMIT 10
     """)
     fig = px.bar(canal, x="valor", y="canal", orientation="h")
-    fig.update_traces(marker_color=tema.AZUL)
+    fig.update_traces(marker_color=tema.AZUL,
+                      hovertemplate="%{y}<br>R$ %{x:.1f} mi<extra></extra>")
     fig.update_yaxes(title=None, autorange="reversed")
     fig.update_xaxes(title="R$ milhões")
-    st.plotly_chart(tema.aplicar(fig, "Carteira por canal"),
-                    width='stretch')
+    card_grafico("Carteira por canal", tema.aplicar(fig))
 
-# ---------------------------------------------------------------- funil
+st.write("")
+
 onde_funil = [o for o in onde if o != "quantidade_em_aberto > 0"]
 funil = consulta(f"""
     SELECT status_faturamento, count(*) AS itens,
@@ -185,14 +192,15 @@ funil = consulta(f"""
     GROUP BY 1 ORDER BY 2 DESC
 """)
 fig = px.bar(funil, x="status_faturamento", y="itens", text="itens",
-             hover_data=["valor"])
-fig.update_traces(marker_color=tema.AZUL, texttemplate="%{text:,}")
+             custom_data=["valor"])
+fig.update_traces(marker_color=tema.AZUL, texttemplate="%{text:,}",
+                  textposition="outside",
+                  hovertemplate="%{x}<br>%{y:,} itens<br>R$ %{customdata[0]:.1f} mi"
+                                "<extra></extra>")
 fig.update_xaxes(title=None)
 fig.update_yaxes(title="itens de pedido")
-st.plotly_chart(
-    tema.aplicar(fig, "Conversão do pedido em faturamento (todos os itens, "
-                      "não só os em aberto)", 300),
-    width='stretch')
+card_grafico("Conversão do pedido em faturamento", tema.aplicar(fig, 280),
+             "Todos os itens do recorte, não só os em aberto.")
 
 # ---------------------------------------------------------------- rodapé
 partes = []
@@ -205,7 +213,8 @@ if so_converte:
                   "`EXP`, `ORC`)".replace(",", "."))
 if so_plausivel:
     r = consulta("""
-        SELECT count(*) AS n FROM marts.fct_pedido WHERE NOT valor_pedido_plausivel
+        SELECT count(*) AS n FROM marts.fct_pedido
+        WHERE NOT valor_pedido_plausivel
     """).iloc[0].n
     partes.append(f"**{r} itens** com quantidade implausível")
 st.caption("Os filtros padrão removeram " + " e ".join(partes) + "."

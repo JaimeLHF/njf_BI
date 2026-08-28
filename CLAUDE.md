@@ -71,7 +71,18 @@ Convenções do app:
 - Cada KPI carrega o período no rótulo. A Home usa recortes diferentes das
   páginas de propósito (ano corrente, série completa, posição de hoje), e sem
   o rótulo isso vira pergunta na reunião.
-- Título no topo, legenda embaixo (`tema.aplicar` decide sozinho se há legenda).
+- **Estilo Grafana, tema escuro fixo.** `.streamlit/config.toml` fixa o tema —
+  sem ele o Streamlit segue o sistema e a UI fica escura com gráficos claros.
+- **Nada de `st.plotly_chart` ou `st.metric` solto.** Todo gráfico vai em
+  `card_grafico(titulo, fig, rodape)` e todo indicador em `card_kpi(...)`, de
+  `app/componentes.py`. O título vem do card, não da figura — por isso
+  `tema.aplicar` não desenha título interno.
+- `app/estilo.py` traz o CSS e precisa ser chamado em **toda** página: no
+  Streamlit multipage cada página é um script próprio e o CSS não atravessa.
+- Alturas padrão em `tema.ALTURA_GRADE` (260px, grade 2×2) e
+  `tema.ALTURA_LINHA` (300px, largura cheia). Legenda embaixo, grid só
+  horizontal, `unificado=True` para hover de série temporal.
+- Os banners de alerta ficam fora dos cards, de propósito.
 - **Nada de gráfico com código no eixo.** `cod_familia` (2.584 valores) e
   `cod_linha_producao` (272) não têm descrição em lugar nenhum do DW — não
   viram gráfico. Onde faltava rótulo legível, o corte foi trocado por um que

@@ -1,42 +1,63 @@
-"""Paleta e helpers de gráfico, para as três páginas parecerem a mesma coisa."""
+"""Paleta e template do Plotly. Os títulos agora vêm do card (componentes.py),
+não da figura — por isso `aplicar` não desenha título nenhum.
+"""
 import plotly.graph_objects as go
 import plotly.io as pio
 
-AZUL = "#2563eb"
+# séries — mantidas do tema claro, todas legíveis sobre #181b20
+AZUL = "#4c8dff"
 AZUL_CLARO = "#93c5fd"
-VERMELHO = "#dc2626"
+VERMELHO = "#f2584d"
 VERMELHO_CLARO = "#fca5a5"
-CINZA = "#94a3b8"
-VERDE = "#16a34a"
-AMBAR = "#d97706"
+CINZA = "#8e9297"
+VERDE = "#3fb950"
+AMBAR = "#e0a336"
 
-CATEGORICA = [AZUL, "#0891b2", VERDE, AMBAR, "#7c3aed", "#db2777",
-              "#0d9488", "#ca8a04", "#4f46e5", CINZA]
+# superfícies, iguais às de estilo.py
+CARD = "#181b20"
+BORDA = "#2a2e39"
+TEXTO = "#d8d9da"
+TEXTO_FRACO = "#8e9297"
+GRID = "#23262e"
 
-_base = pio.templates["plotly_white"]
-_base.layout.font.family = "system-ui, -apple-system, sans-serif"
-_base.layout.colorway = CATEGORICA
-_base.layout.margin = dict(l=8, r=8, t=48, b=8)
-_base.layout.hoverlabel.font.size = 13
-pio.templates["njf"] = _base
+CATEGORICA = [AZUL, "#3fb0c9", VERDE, AMBAR, "#a371f7", "#f778ba",
+              "#2dd4bf", "#d4a72c", "#7c8cff", CINZA]
+
+ALTURA_GRADE = 260   # gráficos em grade 2x2
+ALTURA_LINHA = 300   # gráficos de largura cheia
+
+_t = go.layout.Template()
+_t.layout.font = dict(family="system-ui, -apple-system, sans-serif",
+                      size=11, color=TEXTO)
+_t.layout.paper_bgcolor = "rgba(0,0,0,0)"
+_t.layout.plot_bgcolor = "rgba(0,0,0,0)"
+_t.layout.colorway = CATEGORICA
+_t.layout.hoverlabel = dict(bgcolor=CARD, bordercolor=BORDA,
+                            font=dict(size=12, color=TEXTO))
+_t.layout.xaxis = dict(showgrid=False, linecolor=BORDA, zeroline=False,
+                       tickfont=dict(size=11, color=TEXTO_FRACO),
+                       title=dict(font=dict(size=11, color=TEXTO_FRACO)))
+_t.layout.yaxis = dict(showgrid=True, gridcolor=GRID, gridwidth=1,
+                       linecolor="rgba(0,0,0,0)", zerolinecolor=BORDA,
+                       tickfont=dict(size=11, color=TEXTO_FRACO),
+                       title=dict(font=dict(size=11, color=TEXTO_FRACO)))
+pio.templates["njf"] = _t
 pio.templates.default = "njf"
 
 
-def aplicar(fig: go.Figure, titulo: str = "", altura: int = 340) -> go.Figure:
-    """Título no topo, legenda embaixo. A legenda horizontal no topo brigava
-    com o título — em tela estreita ela subia por cima dele."""
+def aplicar(fig: go.Figure, altura: int = ALTURA_GRADE,
+            unificado: bool = False) -> go.Figure:
+    """`unificado`: hover de série temporal, que mostra todas as séries do
+    mesmo x de uma vez."""
     tem_legenda = len(fig.data) > 1 and any(
-        getattr(t, "name", None) for t in fig.data
-    )
+        getattr(t, "name", None) for t in fig.data)
     fig.update_layout(
-        title=dict(text=titulo, font=dict(size=15), y=0.97, yanchor="top",
-                   x=0, xanchor="left"),
         height=altura,
         showlegend=tem_legenda,
-        legend=dict(orientation="h", yanchor="top", y=-0.16, x=0,
-                    xanchor="left", font=dict(size=11)),
-        margin=dict(l=8, r=8, t=46, b=56 if tem_legenda else 8),
+        legend=dict(orientation="h", yanchor="top", y=-0.22, x=0,
+                    xanchor="left", font=dict(size=11, color=TEXTO_FRACO),
+                    bgcolor="rgba(0,0,0,0)"),
+        margin=dict(l=40, r=20, t=10, b=62 if tem_legenda else 40),
+        hovermode="x unified" if unificado else "closest",
     )
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(gridcolor="#e2e8f0", zerolinecolor="#cbd5e1")
     return fig

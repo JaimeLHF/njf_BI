@@ -1,0 +1,12 @@
+# Tema fixo: sem isto o Streamlit segue o tema do sistema e a UI fica escura
+# enquanto os gráficos do Plotly continuam claros.
+[theme]
+base = "dark"
+primaryColor = "#4c8dff"
+backgroundColor = "#0f1116"
+secondaryBackgroundColor = "#181b20"
+textColor = "#d8d9da"
+font = "sans serif"
+
+[server]
+headless = true
